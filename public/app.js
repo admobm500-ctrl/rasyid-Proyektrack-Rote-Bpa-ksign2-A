@@ -27,21 +27,15 @@ function folderIsProtected(id) { const f = folderById(id); return f ? f.protecte
 // Isu Eksternal & Internal — isu/kendala yang sedang berjalan selama masa
 // kerja proyek (isu sosial masyarakat, pembebasan lahan, keterlambatan
 // desain, dll), lengkap dengan foto bukti opsional (JPG/PNG/JPEG/HEIC).
-const ISU_KATEGORI_LABEL = { internal: "Internal", eksternal: "Eksternal", k3: "K3 (Keselamatan)" };
+const ISU_KATEGORI_LABEL = { internal: "Internal", eksternal: "Eksternal" };
 const ISU_STATUS_LABEL = { berjalan: "Berjalan", selesai: "Selesai" };
-const ISU_KEPARAHAN_LABEL = { ringan: "Ringan (P3K)", sedang: "Sedang (Rawat Jalan)", berat: "Berat (Rawat Inap)", fatal: "Fatal" };
 function isuBadge(kategori) {
-  const cls = kategori === "k3" ? "status-critical" : kategori === "eksternal" ? "status-warning" : "status-neutral";
+  const cls = kategori === "eksternal" ? "status-critical" : "status-neutral";
   return `<span class="badge ${cls}"><span class="dot"></span>${ISU_KATEGORI_LABEL[kategori] || kategori}</span>`;
 }
 function isuStatusBadge(status) {
   const cls = status === "berjalan" ? "status-warning" : "status-good";
   return `<span class="badge ${cls}"><span class="dot"></span>${ISU_STATUS_LABEL[status] || status}</span>`;
-}
-function keparahanBadge(keparahan) {
-  if (!keparahan) return '<span class="empty-note" style="padding:0;">–</span>';
-  const cls = (keparahan === "fatal" || keparahan === "berat") ? "status-critical" : keparahan === "sedang" ? "status-warning" : "status-neutral";
-  return `<span class="badge ${cls}"><span class="dot"></span>${ISU_KEPARAHAN_LABEL[keparahan] || keparahan}</span>`;
 }
 const ISU_FOTO_EXT_RE = /\.(jpe?g|png|heic|heif)$/i;
 // Akun Pengelola (Pemilik/BBM/Alat) divalidasi di server (POST /api/login,
@@ -156,7 +150,7 @@ let projectPhotos = {}; // projectId -> array URL foto (dari server), bisa lebih
 let heroPhotoIndex = {}; // projectId -> index foto yang sedang ditampilkan
 let fuelOpeningBalance = {}; // projectId -> Saldo Awal BBM (Liter), dari server
 
-let state = { projectId: null, view: "overview", dokFolder: null, documentsUnlocked: false, pengelolaRole: null, pengelolaLabel: null, chatView: "list", visitorSessionId: null };
+let state = { projectId: null, view: "overview", dokFolder: null, documentsUnlocked: false, pengelolaRole: null, pengelolaLabel: null };
 let editing = { produksi: null, bbm: null, alat: null, manpower: null, cuaca: null, kontrak: null, ritasi: null, isu: null };
 
 // Chat internal — pesan tersimpan permanen di server (tabel chat_messages),
@@ -263,7 +257,6 @@ els.openAddBtn.disabled = false;
    View switching
 --------------------------------------------------------------------- */
 const ADD_BUTTON_LABEL = { overview: null, produksi: "+ Tambah Produksi", ritasi: "+ Tambah Ritasi DT", bbm: "+ Tambah BBM", alat: "+ Tambah Alat", manpower: "+ Tambah Manpower", cuaca: "+ Tambah Cuaca", dokumen: "+ Upload Dokumen", isu: "+ Tambah Isu", kontrak: "+ Tambah Item Kontrak" };
-const VIEW_TITLE = { overview: "Beranda", produksi: "Laporan Produksi Harian", ritasi: "Laporan Ritasi Dump Truck (DT)", bbm: "Laporan BBM", alat: "Tabulasi Status Alat", manpower: "Tabulasi Manpower", cuaca: "Laporan Cuaca Harian", dokumen: "Dokumen", isu: "Catatan Isu Eksternal, Internal & K3", kontrak: "Realisasi Progres S.d Ini" };
 const MODAL_OPENER_FOR_VIEW = { produksi: (r) => openProduksiModal(r), ritasi: (r) => openRitasiModal(r), bbm: (r) => openBbmModal(r), alat: (r) => openAlatModal(r), manpower: (r) => openManpowerModal(r), cuaca: (r) => openCuacaModal(r), isu: (r) => openIsuModal(r), kontrak: (r) => openKontrakModal(r) };
 const MODAL_EDIT_KEY = { "modal-produksi": "produksi", "modal-ritasi": "ritasi", "modal-bbm": "bbm", "modal-alat": "alat", "modal-manpower": "manpower", "modal-cuaca": "cuaca", "modal-isu": "isu", "modal-kontrak": "kontrak" };
 
@@ -279,13 +272,6 @@ function setView(view) {
   }
 }
 $$(".navlink").forEach((btn) => btn.addEventListener("click", () => { setView(btn.dataset.view); $(".sidebar").classList.remove("open"); }));
-
-$("#printReportBtn").addEventListener("click", () => {
-  const project = PROJECTS.find((p) => p.id === state.projectId) || PROJECTS[0];
-  const title = VIEW_TITLE[state.view] || "Laporan";
-  $("#printHeader").innerHTML = `<div class="pr-title">${escapeHtml(project ? project.name : "")} — ${escapeHtml(title)}</div><div class="pr-meta">Dicetak pada ${fmtDateLong(todayISO())}</div>`;
-  window.print();
-});
 
 // Tombol garis-3 (hamburger) di pojok kanan atas topbar — buka/tutup menu.
 $("#menuToggleBtn").addEventListener("click", (e) => {
@@ -362,13 +348,12 @@ function updateProjectHero() {
   if (curIdx >= photos.length) curIdx = Math.max(photos.length - 1, 0);
   heroPhotoIndex[project.id] = curIdx;
   const photo = photos[curIdx];
-  hero.style.backgroundImage = photo ? `url("${photo.url}")` : PROJECT_GRADIENTS[idx % PROJECT_GRADIENTS.length];
+  hero.style.backgroundImage = photo ? `url("${photo}")` : PROJECT_GRADIENTS[idx % PROJECT_GRADIENTS.length];
   $("#heroPrevBtn").classList.toggle("hidden", photos.length < 2);
   $("#heroNextBtn").classList.toggle("hidden", photos.length < 2);
   $("#heroDots").innerHTML = photos.length > 1
     ? photos.map((_, i) => `<span class="dot-ind${i === curIdx ? " active" : ""}"></span>`).join("")
     : "";
-  $("#managePhotoBtn").classList.toggle("hidden", photos.length < 1);
 }
 
 $("#changePhotoBtn").addEventListener("click", () => $("#projectPhotoInput").click());
@@ -382,7 +367,7 @@ $("#projectPhotoInput").addEventListener("change", async (e) => {
     const res = await apiFetch("/api/photos", { method: "POST", body: fd });
     if (!projectPhotos[state.projectId]) projectPhotos[state.projectId] = [];
     const startIdx = projectPhotos[state.projectId].length;
-    projectPhotos[state.projectId].push(...res.photos);
+    projectPhotos[state.projectId].push(...res.urls);
     heroPhotoIndex[state.projectId] = startIdx; // langsung tampilkan foto baru yang pertama ditambahkan
     updateProjectHero();
     showToast(files.length > 1 ? `${files.length} foto proyek ditambahkan.` : "Foto proyek ditambahkan.");
@@ -403,58 +388,6 @@ $("#heroNextBtn").addEventListener("click", () => {
   if (photos.length < 2) return;
   heroPhotoIndex[state.projectId] = ((heroPhotoIndex[state.projectId] || 0) + 1) % photos.length;
   updateProjectHero();
-});
-
-/* ---- Kelola Foto Proyek (lihat semua, pilih mana yang tampil, hapus) ---- */
-function renderFotoPickerGrid() {
-  const photos = projectPhotos[state.projectId] || [];
-  const curIdx = heroPhotoIndex[state.projectId] || 0;
-  const grid = $("#fotoPickerGrid");
-  $("#fotoPickerEmpty").classList.toggle("hidden", photos.length > 0);
-  const canDelete = state.pengelolaRole === "owner";
-  grid.innerHTML = photos.map((p, i) => `
-    <div class="foto-picker-item${i === curIdx ? " active" : ""}" style="background-image:url('${p.url}')" data-idx="${i}" title="Klik untuk tampilkan foto ini">
-      ${i === curIdx ? '<span class="foto-picker-badge">Tampil</span>' : ""}
-      ${canDelete ? `<button type="button" class="foto-picker-del" data-idx="${i}" title="Hapus foto ini" aria-label="Hapus foto ini">🗑️</button>` : ""}
-    </div>
-  `).join("");
-}
-$("#managePhotoBtn").addEventListener("click", () => {
-  renderFotoPickerGrid();
-  openModal("modal-foto-proyek");
-});
-$("#fotoPickerGrid").addEventListener("click", async (e) => {
-  const delBtn = e.target.closest(".foto-picker-del");
-  const item = e.target.closest(".foto-picker-item");
-  if (delBtn) {
-    e.stopPropagation();
-    const i = Number(delBtn.dataset.idx);
-    const photos = projectPhotos[state.projectId] || [];
-    const photo = photos[i];
-    if (!photo) return;
-    if (!confirm("Hapus foto ini dari proyek? Tindakan ini tidak bisa dibatalkan.")) return;
-    delBtn.disabled = true;
-    try {
-      await apiFetch(`/api/photos/${photo.id}`, { method: "DELETE" });
-      photos.splice(i, 1);
-      let curIdx = heroPhotoIndex[state.projectId] || 0;
-      if (curIdx >= photos.length) curIdx = Math.max(photos.length - 1, 0);
-      heroPhotoIndex[state.projectId] = curIdx;
-      updateProjectHero();
-      renderFotoPickerGrid();
-      showToast("Foto proyek dihapus.");
-    } catch (err) {
-      showToast(err.message || "Gagal menghapus foto.", true);
-      delBtn.disabled = false;
-    }
-    return;
-  }
-  if (item) {
-    const i = Number(item.dataset.idx);
-    heroPhotoIndex[state.projectId] = i;
-    updateProjectHero();
-    renderFotoPickerGrid();
-  }
 });
 
 function renderKpis() {
@@ -1434,9 +1367,6 @@ function openIsuModal(row) {
   $("#isu-status").value = row ? row.status : "berjalan";
   $("#isu-judul").value = row ? row.judul : "";
   $("#isu-deskripsi").value = row ? row.deskripsi : "";
-  $("#isu-tindakan").value = row ? (row.tindakanPerbaikan || "") : "";
-  $("#isu-keparahan").value = (row && row.keparahan) ? row.keparahan : "ringan";
-  $("#isu-keparahan-field").classList.toggle("hidden", $("#isu-kategori").value !== "k3");
   $("#isu-foto").value = "";
   editingIsuFoto = row ? row.foto : null;
   editingIsuFotoRemoved = false;
@@ -1444,9 +1374,6 @@ function openIsuModal(row) {
   $("#isu-error").style.display = "none";
   $("#modal-isu").classList.remove("hidden");
 }
-$("#isu-kategori").addEventListener("change", (e) => {
-  $("#isu-keparahan-field").classList.toggle("hidden", e.target.value !== "k3");
-});
 
 $("#form-isu").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1459,8 +1386,6 @@ $("#form-isu").addEventListener("submit", async (e) => {
   fd.append("status", $("#isu-status").value);
   fd.append("judul", $("#isu-judul").value);
   fd.append("deskripsi", $("#isu-deskripsi").value);
-  fd.append("tindakanPerbaikan", $("#isu-tindakan").value);
-  if ($("#isu-kategori").value === "k3") fd.append("keparahan", $("#isu-keparahan").value);
   const fotoFile = $("#isu-foto").files[0];
   if (fotoFile) fd.append("foto", fotoFile);
   else if (editing.isu && editingIsuFotoRemoved) fd.append("removeFoto", "1");
@@ -1495,18 +1420,16 @@ function renderIsuList() {
 
   $("#isuSubtitle").textContent = rows.length + " isu ditemukan";
   if (rows.length === 0) {
-    $("#isuTbody").innerHTML = `<tr><td colspan="9" class="empty-note">Belum ada isu yang tercatat.</td></tr>`;
+    $("#isuTbody").innerHTML = `<tr><td colspan="7" class="empty-note">Belum ada isu yang tercatat.</td></tr>`;
     return;
   }
   $("#isuTbody").innerHTML = rows.map((r) => `
     <tr>
       <td>${fmtDateLong(r.date)}</td>
       <td>${isuBadge(r.kategori)}</td>
-      <td>${keparahanBadge(r.keparahan)}</td>
       <td><b>${escapeHtml(r.judul)}</b></td>
       <td>${isuStatusBadge(r.status)}</td>
       <td>${escapeHtml(r.deskripsi) || '<span class="muted">–</span>'}</td>
-      <td>${r.tindakanPerbaikan ? escapeHtml(r.tindakanPerbaikan) : '<span class="muted">–</span>'}</td>
       <td>${r.foto ? `<a href="${r.foto}" target="_blank" rel="noopener"><img class="isu-foto-thumb" src="${r.foto}" alt="Foto bukti"></a>` : '<span class="muted">–</span>'}</td>
       <td><button class="edit-btn" data-kind="isu" data-id="${r.id}">Edit</button><button class="del-btn" data-kind="isu" data-id="${r.id}">Hapus</button></td>
     </tr>
@@ -2038,160 +1961,6 @@ $("#bbmExportBtn").addEventListener("click", exportBbmExcel);
 $("#cuacaProjectFilter").addEventListener("change", renderCuacaTable);
 
 /* ---------------------------------------------------------------------
-   Download Excel — satu tombol per menu (Produksi, Ritasi, Alat, Manpower,
-   Cuaca, Isu, Realisasi Progres), semua lewat helper generik downloadWorkbook.
---------------------------------------------------------------------- */
-function safeFileNameFragment(name) { return String(name).replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, ""); }
-function downloadWorkbook(title, project, sheetName, aoa, colWidths, fileNamePrefix) {
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  if (colWidths) ws["!cols"] = colWidths;
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
-  const safeName = safeFileNameFragment(project ? project.name : "SemuaProyek");
-  XLSX.writeFile(wb, `${fileNamePrefix}-${safeName}.xlsx`);
-  showToast(`File Excel ${title} sudah diunduh.`);
-}
-
-function exportProduksiExcel() {
-  const projFilter = $("#produksiProjectFilter").value;
-  const typeFilter = $("#produksiTypeFilter").value;
-  const q = $("#produksiSearch").value.trim().toLowerCase();
-  const project = PROJECTS.find((p) => p.id === projFilter) || null;
-  let rows = production.slice();
-  if (projFilter !== "all") rows = rows.filter((r) => r.projectId === projFilter);
-  if (typeFilter !== "all") rows = rows.filter((r) => { const item = findKontrakItem(r.kontrakItemId); return item && item.uraian === typeFilter; });
-  if (q) rows = rows.filter((r) => (r.zona + " " + r.equipment + " " + (r.notes || "")).toLowerCase().includes(q));
-  if (!rows.length) { showToast("Belum ada data Produksi Harian untuk di-export."); return; }
-  rows.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
-  const aoa = [["LAPORAN PRODUKSI HARIAN"], [project ? project.name : "Semua Proyek"], []];
-  aoa.push(["Tanggal", "Jenis Pekerjaan", "Volume", "Satuan", "Zona/Lokasi", "Jenis Alat", "Detail Alat/Unit", "Catatan"]);
-  rows.forEach((r) => {
-    const item = findKontrakItem(r.kontrakItemId);
-    aoa.push([fmtDateLong(r.date), item ? item.uraian : "(item dihapus)", r.volume, item ? item.satuan : r.unit, r.zona || "", (r.equipmentTypes || []).join(", "), r.equipment || "", r.notes || ""]);
-  });
-  downloadWorkbook("Produksi Harian", project, "Produksi Harian", aoa,
-    [{ wch: 14 }, { wch: 34 }, { wch: 10 }, { wch: 8 }, { wch: 20 }, { wch: 22 }, { wch: 26 }, { wch: 34 }], "Laporan-Produksi-Harian");
-}
-$("#produksiExportBtn").addEventListener("click", exportProduksiExcel);
-
-function exportRitasiExcel() {
-  const projFilter = $("#ritasiProjectFilter").value;
-  const unitFilter = $("#ritasiUnitFilter").value;
-  const q = $("#ritasiSearch").value.trim().toLowerCase();
-  const project = PROJECTS.find((p) => p.id === projFilter) || null;
-  let rows = ritasi.slice();
-  if (projFilter !== "all") rows = rows.filter((r) => r.projectId === projFilter);
-  if (unitFilter && unitFilter !== "all") rows = rows.filter((r) => r.unit === unitFilter);
-  if (q) rows = rows.filter((r) => (r.unit + " " + (r.notes || "")).toLowerCase().includes(q));
-  if (!rows.length) { showToast("Belum ada data Ritasi DT untuk di-export."); return; }
-  rows.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
-  const aoa = [["LAPORAN RITASI DUMP TRUCK (DT)"], [project ? project.name : "Semua Proyek"], []];
-  aoa.push(["Tanggal", "Unit DT", "Jenis Pekerjaan", "Jumlah Ritasi", "Kapasitas/Rit (M3)", "Total Volume (M3)", "Catatan"]);
-  rows.forEach((r) => {
-    const item = findKontrakItem(r.kontrakItemId);
-    aoa.push([fmtDateLong(r.date), r.unit, item ? item.uraian : "(item dihapus)", r.count, r.capacity, r.count * r.capacity, r.notes || ""]);
-  });
-  downloadWorkbook("Ritasi DT", project, "Ritasi DT", aoa,
-    [{ wch: 14 }, { wch: 18 }, { wch: 30 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 34 }], "Laporan-Ritasi-DT");
-}
-$("#ritasiExportBtn").addEventListener("click", exportRitasiExcel);
-
-function exportAlatExcel() {
-  const projFilter = $("#alatProjectFilter").value;
-  const jenisFilter = $("#alatJenisFilter").value;
-  const statusFilter = $("#alatStatusFilter").value;
-  const q = $("#alatSearch").value.trim().toLowerCase();
-  const project = PROJECTS.find((p) => p.id === projFilter) || null;
-  let rows = equipment.slice();
-  if (projFilter !== "all") rows = rows.filter((r) => r.projectId === projFilter);
-  if (jenisFilter !== "all") rows = rows.filter((r) => r.jenis === jenisFilter);
-  if (statusFilter !== "all") rows = rows.filter((r) => r.status === statusFilter);
-  if (q) rows = rows.filter((r) => (r.nama + " " + (r.notes || "")).toLowerCase().includes(q));
-  if (!rows.length) { showToast("Belum ada data Alat untuk di-export."); return; }
-  rows.sort((a, b) => a.nama.localeCompare(b.nama));
-  const aoa = [["TABULASI STATUS ALAT"], [project ? project.name : "Semua Proyek"], []];
-  aoa.push(["Nama Alat", "Jenis", "Status", "Catatan"]);
-  rows.forEach((r) => aoa.push([r.nama, r.jenis, ALAT_STATUS_LABEL[r.status] || r.status, r.notes || ""]));
-  downloadWorkbook("Alat", project, "Alat", aoa,
-    [{ wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 34 }], "Laporan-Alat");
-}
-$("#alatExportBtn").addEventListener("click", exportAlatExcel);
-
-function exportManpowerExcel() {
-  const projFilter = $("#manpowerProjectFilter").value;
-  const q = $("#manpowerSearch").value.trim().toLowerCase();
-  const project = PROJECTS.find((p) => p.id === projFilter) || null;
-  let rows = manpower.slice();
-  if (projFilter !== "all") rows = rows.filter((r) => r.projectId === projFilter);
-  if (q) rows = rows.filter((r) => (r.jabatan + " " + (r.notes || "")).toLowerCase().includes(q));
-  if (!rows.length) { showToast("Belum ada data Manpower untuk di-export."); return; }
-  rows.sort((a, b) => a.jabatan.localeCompare(b.jabatan));
-  const aoa = [["TABULASI MANPOWER"], [project ? project.name : "Semua Proyek"], []];
-  aoa.push(["Jabatan", "Jumlah Orang", "Catatan"]);
-  let total = 0;
-  rows.forEach((r) => { total += r.jumlahOrang; aoa.push([r.jabatan, r.jumlahOrang, r.notes || ""]); });
-  aoa.push([]);
-  aoa.push(["Total", total, ""]);
-  downloadWorkbook("Manpower", project, "Manpower", aoa,
-    [{ wch: 28 }, { wch: 14 }, { wch: 34 }], "Laporan-Manpower");
-}
-$("#manpowerExportBtn").addEventListener("click", exportManpowerExcel);
-
-function exportCuacaExcel() {
-  const projFilter = $("#cuacaProjectFilter").value;
-  const project = PROJECTS.find((p) => p.id === projFilter) || null;
-  let rows = weather.slice();
-  if (projFilter !== "all") rows = rows.filter((r) => r.projectId === projFilter);
-  if (!rows.length) { showToast("Belum ada data Cuaca untuk di-export."); return; }
-  rows.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
-  const aoa = [["LAPORAN CUACA HARIAN"], [project ? project.name : "Semua Proyek"], []];
-  aoa.push(["Tanggal", "Kondisi", "Curah Hujan (mm)", "Jam Terhambat", "Catatan"]);
-  rows.forEach((r) => aoa.push([fmtDateLong(r.date), WEATHER_LABEL[r.condition] || r.condition, r.rainfallMm || 0, r.hoursLost || 0, r.notes || ""]));
-  downloadWorkbook("Cuaca", project, "Cuaca", aoa,
-    [{ wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 34 }], "Laporan-Cuaca");
-}
-$("#cuacaExportBtn").addEventListener("click", exportCuacaExcel);
-
-function exportIsuExcel() {
-  const projFilter = $("#isuProjectFilter").value;
-  const kategoriFilter = $("#isuKategoriFilter").value;
-  const statusFilter = $("#isuStatusFilter").value;
-  const q = $("#isuSearch").value.trim().toLowerCase();
-  const project = PROJECTS.find((p) => p.id === projFilter) || null;
-  let rows = isu.slice();
-  if (projFilter !== "all") rows = rows.filter((r) => r.projectId === projFilter);
-  if (kategoriFilter !== "all") rows = rows.filter((r) => r.kategori === kategoriFilter);
-  if (statusFilter !== "all") rows = rows.filter((r) => r.status === statusFilter);
-  if (q) rows = rows.filter((r) => (r.judul + " " + (r.deskripsi || "")).toLowerCase().includes(q));
-  if (!rows.length) { showToast("Belum ada data Isu untuk di-export."); return; }
-  rows.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
-  const aoa = [["CATATAN ISU EKSTERNAL, INTERNAL & K3"], [project ? project.name : "Semua Proyek"], []];
-  aoa.push(["Tanggal", "Kategori", "Tingkat Keparahan (K3)", "Judul", "Status", "Deskripsi", "Tindakan Perbaikan", "Ada Foto Bukti"]);
-  rows.forEach((r) => aoa.push([
-    fmtDateLong(r.date), ISU_KATEGORI_LABEL[r.kategori] || r.kategori, r.keparahan ? (ISU_KEPARAHAN_LABEL[r.keparahan] || r.keparahan) : "",
-    r.judul, ISU_STATUS_LABEL[r.status] || r.status, r.deskripsi || "", r.tindakanPerbaikan || "", r.foto ? "Ya" : "Tidak",
-  ]));
-  downloadWorkbook("Isu", project, "Isu", aoa,
-    [{ wch: 14 }, { wch: 16 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 40 }, { wch: 40 }, { wch: 14 }], "Laporan-Isu");
-}
-$("#isuExportBtn").addEventListener("click", exportIsuExcel);
-
-function exportKontrakExcel() {
-  const projFilter = $("#kontrakProjectFilter").value || state.projectId;
-  const project = PROJECTS.find((p) => p.id === projFilter) || null;
-  const rows = computeKontrakRows(projFilter);
-  if (!rows.length) { showToast("Belum ada item kontrak untuk di-export."); return; }
-  const totalProgress = rows.reduce((s, r) => s + r.bobotTercapai, 0);
-  const aoa = [["REALISASI PROGRES S.D INI"], [project ? project.name : "Semua Proyek"], [`Progress Kumulatif: ${fmtNum2(totalProgress)}%`]];
-  aoa.push([]);
-  aoa.push(["No", "Uraian Pekerjaan", "Satuan", "Volume Kontrak", "Bobot (%)", "Volume Tercapai", "% Item", "Bobot Tercapai (%)"]);
-  rows.forEach((r) => aoa.push([r.no, r.uraian, r.satuan, r.volumeKontrak, Math.round(r.bobot * 100) / 100, Math.round(r.achieved * 100) / 100, Math.round(r.pctItem * 100) / 100, Math.round(r.bobotTercapai * 100) / 100]));
-  downloadWorkbook("Realisasi Progres", project, "Realisasi Progres", aoa,
-    [{ wch: 6 }, { wch: 40 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 16 }], "Laporan-Realisasi-Progres");
-}
-$("#kontrakExportBtn").addEventListener("click", exportKontrakExcel);
-
-/* ---------------------------------------------------------------------
    Refresh / init
 --------------------------------------------------------------------- */
 function refreshAll() {
@@ -2399,10 +2168,9 @@ function logoutPengelola() {
   apiFetch("/api/logout", { method: "POST" }).catch(() => {});
   state.pengelolaRole = null;
   state.pengelolaLabel = null;
-  state.chatView = "list";
   renderAuthArea();
   applyRoleAccess();
-  renderLiveChatArea();
+  renderPengelolaChatArea();
   showToast("Berhasil keluar dari akun pengelola.");
 }
 $("#authArea").addEventListener("click", (e) => {
@@ -2418,11 +2186,10 @@ $("#form-login").addEventListener("submit", async (e) => {
     const acc = await apiFetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: u, password: p }) });
     state.pengelolaRole = acc.role;
     state.pengelolaLabel = acc.label;
-    state.chatView = "list";
     closeModal($("#modal-login"));
     renderAuthArea();
     applyRoleAccess();
-    loadChatSessionsForPengelola().then(renderLiveChatArea);
+    renderPengelolaChatArea();
     showToast(`Masuk sebagai ${acc.label}.`);
   } catch (err) {
     $("#login-error").textContent = err.message || "Username atau password salah. Coba lagi.";
@@ -2445,235 +2212,12 @@ function applyRoleAccess() {
 }
 
 /* ---------------------------------------------------------------------
-   Live Chat (floating widget)
+   Chat Bantuan & Pengembangan (floating widget)
    Tab "Kontak Cepat": link langsung WA/email (bukan chatbot AI sungguhan).
-   Tab "Live Chat": pengunjung (tanpa login) mulai sesi obrolan baru,
-   dikenali lewat ID sesi tersimpan di localStorage browsernya; Pengelola
-   (akun manapun yang login) melihat SEMUA sesi sebagai inbox & membalas
-   satu-satu. Ada auto-reply bot ringan (keyword-matching, bukan AI) untuk
-   pertanyaan umum di sisi pengunjung.
+   Tab "Chat Internal": pesan tersimpan permanen di server, siapa saja bisa
+   kirim, tapi HANYA bisa dibaca setelah login sebagai Pengelola (lihat
+   login pengelola di atas).
 --------------------------------------------------------------------- */
-let chatSessions = [];
-const VISITOR_SESSION_KEY = "pt-visitor-session-id";
-try {
-  const savedVid = localStorage.getItem(VISITOR_SESSION_KEY);
-  if (savedVid) state.visitorSessionId = Number(savedVid);
-} catch (err) { /* localStorage tidak tersedia — bukan fatal, cuma berarti sesi tidak diingat */ }
-
-function findChatSession(id) { return chatSessions.find((s) => s.id === id); }
-function myVisitorSession() { return state.visitorSessionId ? findChatSession(state.visitorSessionId) : null; }
-
-async function loadChatSessionsForPengelola() {
-  try {
-    chatSessions = await apiFetch("/api/chat/sessions");
-  } catch (err) {
-    console.error("Gagal memuat Live Chat:", err);
-  }
-}
-async function refreshMyVisitorSession() {
-  if (!state.visitorSessionId) return;
-  try {
-    const fresh = await apiFetch(`/api/chat/sessions/${state.visitorSessionId}`);
-    const idx = chatSessions.findIndex((s) => s.id === fresh.id);
-    if (idx >= 0) chatSessions[idx] = fresh; else chatSessions.push(fresh);
-  } catch (err) { /* sesi mungkin belum ada / gagal jaringan — biarkan, coba lagi di polling berikutnya */ }
-}
-
-function fmtChatTime(iso) {
-  const d = new Date(iso);
-  const sameDay = d.toDateString() === new Date().toDateString();
-  return sameDay ? d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : fmtDateLong(String(iso).slice(0, 10));
-}
-function scrollChatToBottom() {
-  const list = $("#chatMsgList");
-  if (list) list.scrollTop = list.scrollHeight;
-}
-
-const CHAT_BOT_FAQ = [
-  { keywords: ["jadwal", "progres", "kapan selesai", "target selesai"], answer: "Untuk progres & jadwal terkini bisa dicek di menu Beranda (ringkasan) atau Realisasi Progres (persentase terhadap kontrak) — datanya update tiap ada laporan harian baru. 🙂" },
-  { keywords: ["lokasi", "alamat", "dimana", "di mana"], answer: "Untuk titik lokasi proyek yang lebih detail, silakan tanyakan ke tim lewat tab \"Kontak Cepat\" atau lanjut chat di sini." },
-  { keywords: ["jam kerja", "jam operasional", "buka jam berapa"], answer: "Jam kerja lapangan umumnya 07.00–17.00, menyesuaikan cuaca & kondisi lapangan pada hari itu." },
-  { keywords: ["dokumen", "download", "unduh"], answer: "Dokumen proyek bisa diunduh lewat menu Dokumen. Sebagian folder butuh password — hubungi Pengelola kalau belum punya aksesnya." },
-  { keywords: ["lapor", "keluhan", "komplain", "kendala", "isu"], answer: "Terima kasih laporannya 🙏 — akan diteruskan ke tim untuk ditindaklanjuti. Status isu yang sedang berjalan juga bisa dipantau di menu Beranda / Isu Eksternal & Internal." },
-  { keywords: ["login", "password", "masuk akun", "lupa password"], answer: "Login Pengelola pakai tombol 👤 di kanan atas. Kalau lupa/butuh akses, silakan hubungi Pengelola langsung ya." },
-  { keywords: ["kontak", "telepon", "nomor hp", "hubungi", "whatsapp"], answer: "Kontak cepat tim kami ada di tab \"Kontak Cepat\" (WhatsApp & email) — atau tetap lanjut chat di sini, nanti dibalas Pengelola. 🙂" },
-  { keywords: ["terima kasih", "makasih", "thanks"], answer: "Sama-sama! 🙏 Kalau ada pertanyaan lain, tulis saja di sini ya." },
-  { keywords: ["halo", "hai", "pagi", "siang", "sore", "malam"], answer: "Halo juga! 👋 Ada yang bisa dibantu terkait proyek ini? Kamu bisa tanya soal jadwal, lokasi, dokumen, atau langsung tulis pesan untuk Pengelola." },
-];
-const CHAT_BOT_FALLBACK = "Terima kasih pesannya! Pesan kamu tersimpan, nanti dibalas Pengelola kalau sempat login (biasanya di jam kerja). Untuk yang mendesak, coba tab \"Kontak Cepat\" (WA/email) ya.";
-function findBotAnswer(text) {
-  const lower = text.toLowerCase();
-  const hit = CHAT_BOT_FAQ.find((item) => item.keywords.some((k) => lower.includes(k)));
-  return hit ? hit.answer : null;
-}
-async function maybeBotReply(session, text) {
-  const answer = findBotAnswer(text);
-  const alreadyGotAnyReply = session.messages.some((m) => m.from !== "visitor");
-  const replyText = answer || (alreadyGotAnyReply ? null : CHAT_BOT_FALLBACK);
-  if (!replyText) return;
-  session.botTyping = true;
-  renderLiveChatArea();
-  setTimeout(async () => {
-    session.botTyping = false;
-    try {
-      const msg = await apiFetch(`/api/chat/sessions/${session.id}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: replyText, asBot: true }) });
-      session.messages.push(msg);
-    } catch (err) { console.error("Gagal mengirim balasan bot:", err); }
-    renderLiveChatArea();
-  }, 700);
-}
-
-function renderChatBubble(m, isPengelola) {
-  if (m.from === "bot") {
-    return `
-      <div class="chat-bubble-row bot">
-        <div class="chat-bubble bot-bubble">
-          <div>🤖 ${escapeHtml(m.text)}</div>
-          <div class="chat-bubble-meta">${escapeHtml(m.authorName)} · ${fmtChatTime(m.createdAt)}</div>
-        </div>
-      </div>
-    `;
-  }
-  const mine = isPengelola ? m.from === "pengelola" : m.from === "visitor";
-  return `
-    <div class="chat-bubble-row${mine ? " mine" : ""}">
-      <div class="chat-bubble">
-        <div>${escapeHtml(m.text)}</div>
-        <div class="chat-bubble-meta">${escapeHtml(m.authorName)} · ${fmtChatTime(m.createdAt)}</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderChatInbox(el) {
-  const sessions = chatSessions.slice().sort((a, b) => {
-    const at = a.messages.length ? a.messages[a.messages.length - 1].createdAt : "";
-    const bt = b.messages.length ? b.messages[b.messages.length - 1].createdAt : "";
-    return String(bt).localeCompare(String(at));
-  });
-  el.innerHTML = `
-    <div class="help-bot-msg"><span class="live-dot"></span>Live Chat — semua percakapan dengan pengunjung, klik untuk membalas.</div>
-    <div class="chat-session-list" id="chatSessionList">
-      ${sessions.length === 0 ? '<div class="empty-note">Belum ada percakapan masuk.</div>' : sessions.map((s) => {
-        const last = s.messages[s.messages.length - 1];
-        return `
-        <button class="chat-session-item" data-session-id="${s.id}" type="button">
-          <div class="csi-name">${escapeHtml(s.visitorName)}${s.pengelolaUnread ? '<span class="chat-unread-dot"></span>' : ""}</div>
-          <div class="csi-preview">${last ? escapeHtml(last.text) : ""}</div>
-          <div class="csi-time">${last ? fmtChatTime(last.createdAt) : ""}</div>
-        </button>`;
-      }).join("")}
-    </div>
-  `;
-  $$("#chatSessionList .chat-session-item").forEach((btn) => btn.addEventListener("click", () => {
-    state.chatView = Number(btn.dataset.sessionId);
-    renderLiveChatArea();
-  }));
-}
-
-function renderChatThreadView(el, session, isPengelola) {
-  el.innerHTML = `
-    <div class="chat-thread-head">
-      ${isPengelola
-        ? `<button class="chat-back-btn" id="chatBackBtn" type="button">← Semua Percakapan</button><span style="font-weight:700; font-size:12.5px;">${escapeHtml(session.visitorName)}</span>`
-        : `<span class="live-dot"></span><span style="font-size:11.5px; color:var(--muted);">Live — mengobrol dengan Pengelola</span>`}
-    </div>
-    <div class="chat-msg-list" id="chatMsgList">
-      ${session.messages.map((m) => renderChatBubble(m, isPengelola)).join("")}
-      ${session.botTyping ? '<div class="chat-bubble-row bot"><div class="chat-bubble bot-bubble typing">🤖 Bot sedang mengetik…</div></div>' : ""}
-    </div>
-    <form class="chat-composer" id="chatComposerForm">
-      <input type="text" id="chatComposerInput" placeholder="Tulis pesan..." autocomplete="off" required>
-      <button type="submit" title="Kirim">➤</button>
-    </form>
-  `;
-  if (isPengelola) $("#chatBackBtn").addEventListener("click", () => { state.chatView = "list"; renderLiveChatArea(); });
-  $("#chatComposerForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const input = $("#chatComposerInput");
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = "";
-    input.disabled = true;
-    try {
-      const msg = await apiFetch(`/api/chat/sessions/${session.id}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) });
-      session.messages.push(msg);
-      if (isPengelola) session.pengelolaUnread = false; else session.visitorUnread = false;
-      renderLiveChatArea();
-      if (!isPengelola) {
-        showToast("Pesan terkirim.");
-        maybeBotReply(session, text);
-      }
-    } catch (err) {
-      input.value = text;
-      showToast(err.message || "Gagal mengirim pesan ke server — coba lagi.", true);
-    } finally {
-      input.disabled = false;
-      input.focus();
-    }
-  });
-  apiFetch(`/api/chat/sessions/${session.id}/read`, { method: "POST" }).catch(() => {});
-  if (isPengelola) session.pengelolaUnread = false; else session.visitorUnread = false;
-  scrollChatToBottom();
-}
-
-function renderVisitorChatView(el) {
-  const session = myVisitorSession();
-  if (!session) {
-    el.innerHTML = `
-      <div class="help-bot-msg">👋 Halo! Tulis pesan untuk mulai Live Chat — tidak perlu login. Bot kami akan coba jawab otomatis dulu untuk pertanyaan umum (jadwal, lokasi, dokumen, dll). Untuk pertanyaan mendesak, lebih pasti sampai lewat tab "Kontak Cepat" (WA/email).</div>
-      <form id="chatStartForm">
-        <input type="text" id="chatStartName" placeholder="Nama kamu (opsional)" style="width:100%; margin-bottom:8px; padding:9px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13px; box-sizing:border-box;">
-        <textarea id="chatStartMessage" placeholder="Tulis pesan untuk pengelola..." required style="width:100%; min-height:64px; margin-bottom:8px; padding:9px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13px; box-sizing:border-box; resize:vertical;"></textarea>
-        <button type="submit" class="btn primary" style="width:100%;">Mulai Live Chat</button>
-      </form>
-    `;
-    $("#chatStartForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const name = $("#chatStartName").value.trim();
-      const text = $("#chatStartMessage").value.trim();
-      if (!text) return;
-      const submitBtn = e.target.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
-      try {
-        const s = await apiFetch("/api/chat/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, message: text }) });
-        chatSessions.push(s);
-        state.visitorSessionId = s.id;
-        try { localStorage.setItem(VISITOR_SESSION_KEY, String(s.id)); } catch (err) { /* tidak fatal */ }
-        showToast("Live Chat dimulai — pesan terkirim.");
-        renderLiveChatArea();
-        maybeBotReply(s, text);
-      } catch (err) {
-        showToast("Gagal memulai Live Chat ke server — coba lagi.", true);
-        if (submitBtn) submitBtn.disabled = false;
-      }
-    });
-    return;
-  }
-  renderChatThreadView(el, session, false);
-}
-
-function renderLiveChatArea() {
-  const el = $("#liveChatArea");
-  if (!el) return;
-  if (state.pengelolaRole) {
-    const openSession = state.chatView !== "list" ? findChatSession(state.chatView) : null;
-    if (openSession) renderChatThreadView(el, openSession, true);
-    else { state.chatView = "list"; renderChatInbox(el); }
-  } else {
-    renderVisitorChatView(el);
-  }
-  updateChatUnreadBadge();
-}
-function updateChatUnreadBadge() {
-  const badge = $("#helpFabBadge");
-  if (!badge) return;
-  const show = state.pengelolaRole
-    ? chatSessions.some((s) => s.pengelolaUnread)
-    : !!(myVisitorSession() && myVisitorSession().visitorUnread);
-  badge.classList.toggle("hidden", !show);
-}
-
 $("#helpFabBtn").addEventListener("click", () => { $("#helpPanel").classList.toggle("hidden"); });
 $("#helpPanelClose").addEventListener("click", () => { $("#helpPanel").classList.add("hidden"); });
 
@@ -2682,19 +2226,71 @@ $$(".help-tab").forEach((tab) => {
     $$(".help-tab").forEach((t) => t.classList.toggle("active", t === tab));
     $("#helpTabQuick").classList.toggle("hidden", tab.dataset.tab !== "quick");
     $("#helpTabChat").classList.toggle("hidden", tab.dataset.tab !== "chat");
-    if (tab.dataset.tab === "chat") renderLiveChatArea();
+    if (tab.dataset.tab === "chat") renderPengelolaChatArea();
   });
 });
 
-// Polling ringan tiap 7 detik supaya sesi/pesan baru dari pihak lain (Pengelola
-// di perangkat lain, atau pengunjung lain) kelihatan tanpa perlu refresh manual.
-setInterval(async () => {
-  const composerFocused = document.activeElement && document.activeElement.id === "chatComposerInput";
-  if (composerFocused) return;
-  if (state.pengelolaRole) await loadChatSessionsForPengelola();
-  else await refreshMyVisitorSession();
-  renderLiveChatArea();
-}, 7000);
+$("#form-internal-chat").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const from = $("#chat-from").value.trim() || "Anonim";
+  const message = $("#chat-message").value.trim();
+  if (!message) return;
+  try {
+    await apiFetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from, message }) });
+    $("#form-internal-chat").reset();
+    showToast("Pesan terkirim ke pengelola.");
+    renderPengelolaChatArea();
+  } catch (err) {
+    showToast(err.message || "Gagal mengirim pesan.", true);
+  }
+});
+
+function renderPengelolaChatArea() {
+  const el = $("#pengelolaChatArea");
+  if (!el) return;
+  if (state.pengelolaRole) {
+    el.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div style="font-weight:700; font-size:12px;">Pesan Masuk (Pengelola)</div>
+        <span style="font-size:11px; color:var(--muted);">${escapeHtml(state.pengelolaLabel)}</span>
+      </div>
+      <div id="pengelolaMessagesList" class="help-chat-messages">Memuat pesan…</div>
+    `;
+    loadAndRenderPengelolaMessages();
+  } else {
+    el.innerHTML = `
+      <div class="help-bot-msg">🔒 Pesan cuma bisa dibaca setelah login sebagai Pengelola. Login lewat tombol di pojok kanan atas, atau tombol di bawah ini.</div>
+      <button class="btn ghost" id="pengelolaShortcutLoginBtn" style="width:100%;">🔒 Masuk sebagai Pengelola</button>
+    `;
+  }
+}
+$("#pengelolaChatArea").addEventListener("click", (e) => {
+  if (e.target.closest("#pengelolaShortcutLoginBtn")) openLoginModal();
+});
+
+async function loadAndRenderPengelolaMessages() {
+  try {
+    const rows = await apiFetch("/api/chat");
+    renderPengelolaMessages(rows);
+  } catch (err) {
+    const list = $("#pengelolaMessagesList");
+    if (list) list.innerHTML = `<div class="empty-note">Gagal memuat pesan.</div>`;
+  }
+}
+
+function renderPengelolaMessages(rows) {
+  const sorted = (rows || []).slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (sorted.length === 0) {
+    $("#pengelolaMessagesList").innerHTML = `<div class="empty-note">Belum ada pesan masuk.</div>`;
+    return;
+  }
+  $("#pengelolaMessagesList").innerHTML = sorted.map((m) => `
+    <div class="help-chat-msg">
+      <div class="meta"><span class="from">${escapeHtml(m.from)}</span> · ${fmtDateLong(String(m.createdAt).slice(0, 10))}</div>
+      <div class="text">${escapeHtml(m.message)}</div>
+    </div>
+  `).join("");
+}
 
 async function boot() {
   els.connBadge.textContent = "Menyambungkan ke server…";
@@ -2719,7 +2315,6 @@ async function boot() {
     state.documentsUnlocked = !!data.docsUnlocked;
     state.pengelolaRole = (data.session && data.session.role) || null;
     state.pengelolaLabel = (data.session && data.session.label) || null;
-    state.chatView = "list";
 
     els.connBadge.textContent = "Tersambung ke server";
     els.connBadge.className = "conn-badge ok";
@@ -2732,9 +2327,7 @@ async function boot() {
     setView("overview");
     renderAuthArea();
     applyRoleAccess();
-    if (state.pengelolaRole) await loadChatSessionsForPengelola();
-    else await refreshMyVisitorSession();
-    renderLiveChatArea();
+    renderPengelolaChatArea();
   } catch (err) {
     els.connBadge.textContent = "Gagal tersambung ke server";
     els.connBadge.className = "conn-badge err";

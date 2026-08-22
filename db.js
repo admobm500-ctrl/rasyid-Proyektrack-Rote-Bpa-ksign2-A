@@ -15,8 +15,25 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+// node-postgres cetak warning "SECURITY WARNING: The SSL modes 'prefer',
+// 'require', and 'verify-ca' are treated as aliases for 'verify-full'" kalau
+// query param `sslmode=require` (dipakai default oleh Neon & kebanyakan host
+// Postgres lain di connection string mereka) masih ada di connectionString —
+// SSL-nya sendiri tetap kita atur manual lewat opsi `ssl` di bawah, jadi
+// param sslmode di URL dibuang dulu supaya warning-nya tidak muncul (harmless,
+// bukan error, tapi bikin log deploy jadi berisik/menyesatkan).
+function stripSslModeParam(url) {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("sslmode");
+    return u.toString();
+  } catch (err) {
+    return url; // URL tidak valid/tidak bisa di-parse — biarkan apa adanya
+  }
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: stripSslModeParam(process.env.DATABASE_URL),
   // Neon (and most hosted Postgres) require SSL; local Postgres does not.
   ssl: process.env.DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false },
 });

@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Tracking — Proyek Pulau Rote K-SIGN Tahap 2 NK-BPA</title>
+<script src="/vendor/chart.umd.js"></script>
+<script src="/vendor/xlsx.core.min.js"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --page:        #0d0d0d;
+    --surface-1:   #1a1a19;
+    --surface-2:   #232320;
+    --ink:         #ffffff;
+    --ink-2:       #c3c2b7;
+    --muted:       #898781;
+    --grid:        #2c2c2a;
+    --baseline:    #383835;
+    --border:      rgba(255,255,255,0.10);
+    --header-bg:   #0d0d0d;
+    --brand:       #eb6834; /* accent only, not used as a data series */
+    --series-1:    #3987e5; /* blue   - galian */
+    --series-2:    #d95926; /* orange - timbunan */
+    --series-3:    #199e70; /* aqua   - land clearing */
+    --series-4:    #9085e9; /* violet - line clearing */
+    --good:        #0ca30c;
+    --warning:     #fab219;
+    --critical:    #e66767;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--page); color:var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size:14px; line-height:1.45;
+  }
+  button, select, input, textarea{ font-family:inherit; font-size:inherit; color:inherit; }
+
+  .topbar{
+    background:var(--header-bg); color:#fff;
+    display:flex; align-items:center; gap:12px; padding:0 56px 0 16px; height:56px;
+    border-bottom:1px solid var(--border);
+    overflow-x:auto; overflow-y:hidden;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; font-weight:700; font-size:15px; white-space:nowrap; }
+  .topbar .spacer{ flex:1; }
+  .topbar .field{ display:flex; flex-direction:column; gap:2px; }
+  .topbar label{ font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); }
+  .topbar select{ background:var(--surface-1); color:#fff; border:1px solid var(--border); border-radius:4px; padding:6px 10px; min-width:180px; }
+  .topbar .addbtn, .menu-toggle-btn, .auth-icon-btn{ flex:none; }
+  .brand, .today-badge, .auth-area, .conn-badge, .field{ flex:none; }
+  .today-badge{ font-size:12px; color:var(--muted); white-space:nowrap; border-left:1px solid var(--border); padding-left:16px; }
+  .auth-area{ display:flex; align-items:center; gap:8px; }
+  .auth-user-label{ font-size:12px; color:var(--ink-2); white-space:nowrap; }
+  .menu-toggle-btn{ position:fixed; top:11px; right:16px; z-index:150; background:var(--header-bg); border:1px solid var(--border); color:#fff; font-size:18px; width:34px; height:34px; border-radius:6px; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.35); }
+  .menu-toggle-btn:hover{ background:var(--surface-2); }
+  .auth-icon-btn{ width:34px; height:34px; border-radius:50%; background:var(--surface-1); border:1px solid var(--border); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; font-size:18px; }
+  .auth-icon-btn:hover{ background:var(--surface-2); }
+  body.role-visitor .addbtn, body.role-visitor .edit-btn, body.role-visitor .del-btn, body.role-visitor .hero-photo-btn, body.role-visitor .folder-add-btn, body.role-visitor .folder-del-btn, body.role-visitor .write-action{ display:none !important; }
+  .conn-badge{ font-size:11px; padding:3px 9px; border-radius:999px; font-weight:700; white-space:nowrap; flex:none; }
+  .conn-badge.ok{ background:rgba(12,163,12,0.18); color:#4ade80; }
+  .conn-badge.err{ background:rgba(230,103,103,0.18); color:#f3a3a3; }
+
+  .layout{ display:flex; align-items:flex-start; }
+  .sidebar{ width:230px; flex:none; padding:14px 12px; position:fixed; top:64px; right:20px; max-height:calc(100vh - 84px); overflow-y:auto; background:var(--surface-1); border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,0.45); z-index:80; display:none; }
+  .sidebar.open{ display:block; }
+  .sidebar nav{ display:flex; flex-direction:column; gap:2px; }
+  .sidebar button.navlink{ text-align:left; background:transparent; border:none; padding:9px 12px; border-radius:4px; cursor:pointer; color:var(--ink-2); font-weight:500; display:flex; align-items:center; gap:10px; }
+  .sidebar button.navlink:hover{ background:var(--surface-2); color:var(--ink); }
+  .sidebar button.navlink.active{ background:var(--surface-1); color:var(--ink); border:1px solid var(--border); font-weight:700; }
+  .addbtn{ background:var(--brand); color:#fff; border:none; padding:9px 14px; border-radius:4px; font-weight:700; cursor:pointer; font-size:13px; white-space:nowrap; }
+  .addbtn:hover{ background:#d95926; }
+  .addbtn:disabled{ opacity:0.5; cursor:not-allowed; }
+
+  .content{ flex:1; min-width:0; padding:20px 24px 60px; }
+  h1{ font-size:19px; margin:0 0 2px; }
+  h2{ font-size:15px; margin:0 0 12px; }
+  .subtitle{ color:var(--ink-2); margin:0 0 20px; font-size:13px; }
+
+  .kpi-row{ display:grid; grid-template-columns:repeat(7,1fr); gap:12px; margin-bottom:18px; }
+  .tile{ background:var(--surface-1); border:1px solid var(--border); border-radius:6px; padding:14px 16px; }
+  .tile .label{ font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:6px; }
+  .tile .value{ font-size:24px; font-weight:700; }
+  .tile .sub{ font-size:12px; color:var(--ink-2); margin-top:4px; }
+  .bar-track{ height:6px; background:var(--grid); border-radius:3px; margin-top:8px; overflow:hidden; }
+  .bar-fill{ height:100%; background:var(--series-1); border-radius:3px; }
+
+  .badge{ display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px; }
+  .badge .dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+  .badge.wt-galian{ background:rgba(57,135,229,0.16); color:#7cb3f2; }
+  .badge.wt-galian .dot{ background:var(--series-1); }
+  .badge.wt-timbunan{ background:rgba(217,89,38,0.16); color:#f0a578; }
+  .badge.wt-timbunan .dot{ background:var(--series-2); }
+  .badge.wt-land_clearing{ background:rgba(25,158,112,0.16); color:#5fd6ac; }
+  .badge.wt-land_clearing .dot{ background:var(--series-3); }
+  .badge.wt-line_clearing{ background:rgba(144,133,233,0.18); color:#bcb3f5; }
+  .badge.wt-line_clearing .dot{ background:var(--series-4); }
+  .badge.status-good{ background:rgba(12,163,12,0.18); color:#4ade80; }
+  .badge.status-good .dot{ background:var(--good); }
+  .badge.status-warning{ background:rgba(250,178,25,0.18); color:#fbbf24; }
+  .badge.status-warning .dot{ background:var(--warning); }
+  .badge.status-critical{ background:rgba(230,103,103,0.18); color:#f3a3a3; }
+  .badge.status-critical .dot{ background:var(--critical); }
+  .badge.status-neutral{ background:var(--surface-2); color:var(--ink-2); }
+  .badge.status-neutral .dot{ background:var(--muted); }
+
+  .checkbox-group{ display:flex; flex-wrap:wrap; gap:8px 14px; padding:10px 12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-2); }
+  .checkbox-group label{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-2); font-weight:500; cursor:pointer; }
+  .checkbox-group input[type="checkbox"]{ accent-color:var(--series-1); width:15px; height:15px; cursor:pointer; }
+  .equip-badge{ display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px; font-weight:600; font-size:11px; background:var(--surface-2); color:var(--ink-2); border:1px solid var(--border); margin:2px 4px 2px 0; }
+
+  .chart-row{ display:grid; grid-template-columns:1.3fr 1fr; gap:12px; margin-bottom:18px; }
+  .card{ background:var(--surface-1); border:1px solid var(--border); border-radius:6px; padding:16px; }
+  .card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .card-head h2{ margin:0; }
+  .chart-wrap{ height:230px; position:relative; }
+
+  .issues-list{ display:flex; flex-direction:column; gap:8px; }
+  .issue-item{ display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-1); }
+  .issue-item .badge{ flex:none; margin-top:1px; }
+  .issue-badges{ display:flex; flex-direction:column; gap:4px; flex:none; }
+  .issue-meta{ font-size:12px; color:var(--muted); margin-bottom:2px; }
+  .issue-text{ font-size:13px; color:var(--ink); }
+  .empty-note{ color:var(--muted); font-size:13px; padding:10px 2px; }
+  .isu-alert-banner{ background:rgba(250,178,25,0.08); border:1px solid var(--warning); border-radius:6px; padding:14px 16px; margin-bottom:18px; }
+  .isu-foto-thumb{ width:44px; height:44px; object-fit:cover; border-radius:6px; flex:none; border:1px solid var(--border); }
+
+  .filters-row{ display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  .filters-row select, .filters-row input{ background:var(--surface-1); border:1px solid var(--border); border-radius:4px; padding:6px 8px; }
+  table.datatable{ width:100%; border-collapse:collapse; background:var(--surface-1); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  table.datatable thead th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); background:var(--surface-2); padding:10px 12px; border-bottom:1px solid var(--border); }
+  table.datatable tbody td{ padding:10px 12px; border-bottom:1px solid var(--grid); vertical-align:top; font-size:13px; }
+  table.datatable tbody tr:last-child td{ border-bottom:none; }
+  table.datatable tbody tr:hover{ background:var(--surface-2); }
+  .muted{ color:var(--muted); }
+  .del-btn{ background:transparent; border:1px solid var(--border); border-radius:4px; color:var(--ink-2); cursor:pointer; padding:4px 8px; font-size:12px; }
+  .del-btn:hover{ background:rgba(230,103,103,0.15); color:#f3a3a3; border-color:var(--critical); }
+  .dl-btn{ background:var(--surface-2); border:1px solid var(--border); border-radius:4px; color:var(--ink); cursor:pointer; padding:4px 10px; font-size:12px; text-decoration:none; display:inline-block; }
+  .dl-btn:hover{ background:var(--grid); }
+
+  .doc-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px; }
+  .doc-card{ background:var(--surface-1); border:1px solid var(--border); border-radius:6px; padding:14px; display:flex; flex-direction:column; gap:8px; }
+  .doc-card .doc-name{ font-weight:700; font-size:13px; word-break:break-word; }
+  .doc-card .doc-meta{ font-size:12px; color:var(--muted); }
+  .doc-card .doc-actions{ display:flex; gap:8px; margin-top:auto; }
+
+  /* ---- Fuel (BBM) badges ---- */
+  .badge.fuel-masuk{ background:rgba(12,163,12,0.18); color:#4ade80; }
+  .badge.fuel-masuk .dot{ background:var(--good); }
+  .badge.fuel-keluar{ background:rgba(217,89,38,0.16); color:#f0a578; }
+  .badge.fuel-keluar .dot{ background:var(--series-2); }
+
+  /* ---- Stock summary tiles (BBM) ---- */
+  .stock-row{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+  .stock-row .tile .value{ font-size:22px; }
+  .stock-breakdown{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; }
+  .stock-chip{ background:var(--surface-1); border:1px solid var(--border); border-radius:6px; padding:10px 14px; font-size:12px; }
+  .stock-chip .name{ color:var(--ink-2); margin-bottom:3px; }
+  .stock-chip .amount{ font-size:16px; font-weight:700; }
+
+  /* ---- Project hero banner ---- */
+  .project-hero{ position:relative; height:360px; border-radius:8px; border:1px solid var(--border); overflow:hidden; margin-bottom:18px; background-size:cover; background-position:center; }
+  .project-hero::after{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(13,13,13,0.05) 0%, rgba(13,13,13,0.92) 100%); }
+  .project-hero .hero-content{ position:absolute; left:18px; right:18px; bottom:14px; z-index:2; display:flex; justify-content:space-between; align-items:flex-end; gap:12px; }
+  .project-hero h1{ margin:0; font-size:20px; text-shadow:0 1px 4px rgba(0,0,0,0.5); }
+  .project-hero .hero-sub{ color:var(--ink-2); font-size:12px; margin-top:3px; text-shadow:0 1px 4px rgba(0,0,0,0.5); }
+  .hero-photo-btn{ background:rgba(26,26,25,0.75); backdrop-filter:blur(2px); border:1px solid var(--border); color:#fff; padding:7px 12px; border-radius:4px; font-size:12px; cursor:pointer; white-space:nowrap; }
+  .hero-photo-btn:hover{ background:rgba(35,35,32,0.9); }
+  .hero-nav-btn{ position:absolute; top:50%; transform:translateY(-50%); z-index:3; background:rgba(13,13,13,0.55); border:1px solid rgba(255,255,255,0.25); color:#fff; width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; }
+  .hero-nav-btn:hover{ background:rgba(13,13,13,0.82); }
+  .hero-nav-prev{ left:12px; }
+  .hero-nav-next{ right:12px; }
+  .hero-dots{ position:absolute; top:12px; right:14px; z-index:3; display:flex; gap:5px; }
+  .hero-dots .dot-ind{ width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.4); }
+  .hero-dots .dot-ind.active{ background:#fff; }
+
+  /* ---- Document folders ---- */
+  .folder-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:12px; margin-bottom:18px; }
+  .folder-card-wrap{ position:relative; }
+  .folder-card{ width:100%; background:var(--surface-1); border:1px solid var(--border); border-radius:6px; padding:18px 16px; cursor:pointer; display:flex; flex-direction:column; gap:6px; text-align:left; }
+  .folder-card:hover{ background:var(--surface-2); border-color:var(--brand); }
+  .folder-card .folder-icon{ font-size:22px; }
+  .folder-card .folder-name{ font-weight:700; font-size:14px; }
+  .folder-card .folder-count{ font-size:12px; color:var(--muted); }
+  .folder-card .folder-lock{ font-size:11px; color:var(--warning); font-weight:700; }
+  .folder-del-btn{ position:absolute; top:8px; right:8px; width:24px; height:24px; border-radius:50%; background:rgba(13,13,13,0.7); border:1px solid var(--border); color:#fff; cursor:pointer; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center; }
+  .folder-del-btn:hover{ background:rgba(230,103,103,0.35); border-color:var(--critical); }
+  .folder-back{ background:transparent; border:none; color:var(--ink-2); cursor:pointer; font-size:13px; padding:0 0 12px; }
+  .folder-back:hover{ color:var(--ink); }
+  .password-gate{ background:var(--surface-1); border:1px solid var(--border); border-radius:8px; padding:28px; max-width:380px; text-align:center; }
+  .password-gate .lock-icon{ font-size:28px; margin-bottom:8px; }
+  .password-gate input{ width:100%; border:1px solid var(--border); border-radius:4px; padding:9px 10px; background:var(--page); color:var(--ink); margin:12px 0; text-align:center; }
+  .password-gate .pw-error{ color:var(--critical); font-size:12px; min-height:16px; margin-bottom:4px; }
+  .file-size-hint{ font-size:11px; color:var(--muted); margin-top:4px; }
+
+  /* ---- Foto tambah tile ("+") — dipakai di form Isu ---- */
+  .photo-add-tile{ position:relative; width:120px; height:120px; margin-top:6px; border:2px dashed var(--border); border-radius:8px; background:var(--surface-1); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:var(--muted); padding:0; overflow:hidden; }
+  .photo-add-tile:hover{ border-color:var(--brand); color:var(--ink-2); }
+  .photo-add-tile.has-photo{ border-style:solid; }
+  .photo-add-tile img{ width:100%; height:100%; object-fit:cover; }
+  .photo-add-plus{ font-size:28px; line-height:1; font-weight:300; }
+  .photo-add-label{ font-size:11px; }
+  .photo-tile-remove{ position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; background:rgba(13,13,13,0.75); border:1px solid var(--border); color:#fff; cursor:pointer; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center; }
+  .photo-tile-remove:hover{ background:rgba(230,103,103,0.5); }
+
+  /* ---- Kontrak / bobot pekerjaan ---- */
+  .contract-summary{ display:grid; grid-template-columns:1.1fr 1fr; gap:12px; margin-bottom:18px; }
+  .progress-gauge{ display:flex; align-items:center; gap:18px; }
+  .progress-gauge .pg-value{ font-size:34px; font-weight:700; }
+  .progress-gauge .pg-track{ flex:1; height:10px; background:var(--grid); border-radius:5px; overflow:hidden; }
+  .progress-gauge .pg-fill{ height:100%; background:var(--brand); border-radius:5px; }
+  .contract-note{ font-size:12px; color:var(--muted); }
+  .edit-btn{ background:transparent; border:1px solid var(--border); border-radius:4px; color:var(--ink-2); cursor:pointer; padding:4px 8px; font-size:12px; margin-right:6px; }
+  .edit-btn:hover{ background:rgba(57,135,229,0.15); color:#7cb3f2; border-color:var(--series-1); }
+  .link-tag{ font-size:11px; color:var(--muted); }
+  .link-tag.dup{ color:var(--warning); }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal-overlay.hidden{ display:none; }
+  .modal{ background:var(--surface-1); border-radius:8px; width:100%; max-width:620px; max-height:90vh; overflow:auto; padding:22px 24px; border:1px solid var(--border); }
+  .modal h2{ margin-bottom:4px; }
+  .modal .close{ float:right; background:transparent; border:none; font-size:18px; cursor:pointer; color:var(--muted); }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+  .form-grid .full{ grid-column:1 / -1; }
+  .form-field label{ display:block; font-size:12px; font-weight:600; margin-bottom:4px; color:var(--ink-2); }
+  .form-field input, .form-field select, .form-field textarea{ width:100%; border:1px solid var(--border); border-radius:4px; padding:8px 10px; background:var(--page); color:var(--ink); }
+  .form-field textarea{ resize:vertical; min-height:56px; }
+  .form-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:18px; align-items:center; }
+  .form-error{ color:var(--critical); font-size:12px; margin-top:10px; }
+  .btn{ border:none; border-radius:4px; padding:9px 16px; font-weight:700; cursor:pointer; }
+  .btn.primary{ background:var(--brand); color:#fff; }
+  .btn.primary:hover{ background:#d95926; }
+  .btn.primary:disabled{ opacity:0.6; cursor:not-allowed; }
+  .btn.ghost{ background:transparent; color:var(--ink-2); border:1px solid var(--border); }
+  .btn.ghost:hover{ background:var(--surface-2); }
+
+  .toast{ position:fixed; bottom:20px; right:20px; background:var(--surface-1); border:1px solid var(--border); color:#fff; padding:12px 18px; border-radius:6px; font-size:13px; z-index:60; opacity:0; transform:translateY(8px); transition:opacity .2s, transform .2s; pointer-events:none; }
+  .toast.show{ opacity:1; transform:translateY(0); }
+  .toast.error{ border-color:var(--critical); }
+
+  .help-fab{ position:fixed; bottom:24px; right:24px; width:56px; height:56px; border-radius:50%; background:var(--series-1); color:#fff; border:none; font-size:24px; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.4); z-index:70; display:flex; align-items:center; justify-content:center; }
+  .help-fab:hover{ filter:brightness(1.1); }
+  .help-panel{ position:fixed; bottom:92px; right:24px; width:320px; max-height:70vh; display:flex; flex-direction:column; background:var(--surface-1); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,0.5); z-index:70; overflow:hidden; }
+  .help-panel.hidden{ display:none; }
+  .help-panel-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; padding:14px 14px 12px; border-bottom:1px solid var(--border); background:var(--surface-2); flex:none; }
+  .help-panel-tabs{ display:flex; border-bottom:1px solid var(--border); flex:none; }
+  .help-tab{ flex:1; background:transparent; border:none; color:var(--muted); font-size:12px; font-weight:700; padding:10px 8px; cursor:pointer; border-bottom:2px solid transparent; }
+  .help-tab.active{ color:var(--ink); border-bottom-color:var(--series-1); }
+  .help-tab:hover{ color:var(--ink); }
+  .help-panel-body{ padding:14px; display:flex; flex-direction:column; gap:10px; overflow-y:auto; }
+  .help-tab-content.hidden{ display:none; }
+  .help-bot-msg{ background:var(--surface-2); border-radius:8px; padding:10px 12px; font-size:12.5px; color:var(--ink-2); line-height:1.5; }
+  .help-contact-btn{ display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); text-decoration:none; color:var(--ink); transition:background .15s; }
+  .help-contact-btn:hover{ background:var(--surface-2); }
+  .help-contact-btn.wa{ border-color:rgba(12,163,12,0.4); }
+  .help-contact-btn.mail{ border-color:rgba(57,135,229,0.4); }
+  .help-contact-icon{ font-size:20px; flex:none; }
+  .help-contact-label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em; }
+  .help-contact-value{ font-size:13px; font-weight:700; }
+  .help-chat-divider{ border-top:1px solid var(--border); margin:2px 0; }
+  .help-chat-messages{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; }
+  .help-chat-msg{ background:var(--surface-2); border-radius:8px; padding:8px 10px; font-size:12.5px; }
+  .help-chat-msg .from{ font-weight:700; color:var(--ink); }
+  .help-chat-msg .meta{ font-size:10.5px; color:var(--muted); margin-bottom:3px; }
+  .help-chat-msg .text{ color:var(--ink-2); margin-top:3px; line-height:1.4; }
+
+  .demo-note{ font-size:12px; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:8px 12px; margin-bottom:16px; }
+
+  .weather-tabs{ display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:14px; }
+  .weather-tab{ background:transparent; border:none; color:var(--muted); font-size:12.5px; font-weight:700; padding:8px 10px; cursor:pointer; border-bottom:2px solid transparent; }
+  .weather-tab.active{ color:var(--ink); border-bottom-color:var(--series-1); }
+  .weather-tab:hover{ color:var(--ink); }
+  .weather-tab-panel.hidden{ display:none; }
+  .weather-hourly-wrap{ position:relative; display:flex; align-items:center; gap:6px; }
+  .weather-hourly-scroll{ display:flex; gap:10px; overflow-x:auto; scroll-behavior:smooth; padding:2px 2px 10px; flex:1; }
+  .weather-hourly-scroll::-webkit-scrollbar{ height:6px; }
+  .weather-hourly-scroll::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
+  .weather-hour-card{ flex:0 0 92px; text-align:center; background:linear-gradient(180deg, rgba(235,104,52,0.22), rgba(235,104,52,0.05)); border-radius:8px; padding:12px 6px; }
+  .weather-hour-card.is-night{ background:linear-gradient(180deg, rgba(63,81,181,0.32), rgba(63,81,181,0.08)); }
+  .weather-hour-card .hh{ font-size:11px; color:var(--muted); font-weight:700; margin-bottom:6px; }
+  .weather-hour-card .icon{ font-size:26px; }
+  .weather-hour-card .temp{ font-size:15px; font-weight:700; margin-top:6px; }
+  .weather-hour-card .cond{ font-size:9.5px; color:var(--ink-2); text-transform:uppercase; letter-spacing:0.02em; margin-top:4px; min-height:22px; }
+  .weather-hour-card .meta{ font-size:10.5px; color:var(--muted); margin-top:6px; }
+  .weather-hour-scrollbtn{ flex:none; background:var(--surface-2); border:1px solid var(--border); color:var(--ink-2); width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:13px; line-height:1; }
+  .weather-hour-scrollbtn:hover{ color:var(--ink); }
+  .view-section{ display:none; }
+  .view-section.active{ display:block; }
+  .hidden{ display:none !important; }
+
+  @media (max-width:1500px){
+    .today-badge{ display:none; }
+  }
+  @media (max-width:960px){
+    .kpi-row{ grid-template-columns:1fr 1fr; }
+    .chart-row{ grid-template-columns:1fr; }
+    .sidebar{ left:12px; right:12px; width:auto; }
+    .project-hero{ height:240px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <img src="/assets/bpa-logo.png" alt="Logo BPA" style="height:28px; width:auto; display:block;">
+    Project Tracking
+  </div>
+  <div class="field">
+    <label for="projectSelect">Proyek</label>
+    <select id="projectSelect"></select>
+  </div>
+  <div class="spacer"></div>
+  <span class="conn-badge" id="connBadge">menghubungkan…</span>
+  <div class="auth-area" id="authArea"></div>
+  <div class="today-badge" id="todayBadge"></div>
+  <button class="addbtn" id="openAddBtn" disabled>+ Tambah</button>
+  <button class="menu-toggle-btn" id="menuToggleBtn" type="button" aria-label="Buka menu">☰</button>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <nav>
+      <button class="navlink" data-view="overview">Beranda</button>
+      <button class="navlink" data-view="produksi">Produksi Harian</button>
+      <button class="navlink" data-view="ritasi">Ritasi DT</button>
+      <button class="navlink" data-view="bbm">BBM</button>
+      <button class="navlink" data-view="alat">Alat</button>
+      <button class="navlink" data-view="manpower">Manpower</button>
+      <button class="navlink" data-view="cuaca">Cuaca</button>
+      <button class="navlink" data-view="dokumen">Dokumen</button>
+      <button class="navlink" data-view="isu">Isu Eksternal &amp; Internal</button>
+      <button class="navlink" data-view="kontrak">Realisasi Progres S.d ini</button>
+    </nav>
+  </aside>
+
+  <main class="content">
+
+    <div class="demo-note">✅ Website ini sudah <b>tersambung ke server & database</b> — semua data (tambah/edit/hapus/upload/foto) tersimpan permanen, tidak hilang saat refresh. Menu disembunyikan di balik tombol ☰ pojok kanan atas. Login lewat tombol 👤 di kanan atas untuk akses Pengelola (Pemilik/BBM/Alat). Pengunjung yang belum login tetap bisa lihat semua menu & download data, tapi tidak bisa tambah/edit/hapus.</div>
+
+    <!-- ================= BERANDA ================= -->
+    <section id="view-overview" class="view-section active">
+
+      <div class="project-hero" id="projectHero">
+        <button class="hero-nav-btn hero-nav-prev hidden" id="heroPrevBtn" type="button" aria-label="Foto sebelumnya">‹</button>
+        <button class="hero-nav-btn hero-nav-next hidden" id="heroNextBtn" type="button" aria-label="Foto berikutnya">›</button>
+        <div class="hero-dots" id="heroDots"></div>
+        <div class="hero-content">
+          <div>
+            <h1 id="overviewTitle">Beranda Proyek</h1>
+            <div class="hero-sub">Produksi per item, alat, manpower, BBM, cuaca, dan progress kontrak hari ini.</div>
+          </div>
+          <button class="hero-photo-btn" id="changePhotoBtn">📷 Tambah Foto Proyek</button>
+          <input type="file" id="projectPhotoInput" accept="image/*" multiple hidden>
+        </div>
+      </div>
+
+      <div class="isu-alert-banner hidden" id="isuAlertBanner">
+        <div class="card-head" style="margin-bottom:10px;">
+          <h2 style="margin:0;">⚠️ Isu &amp; Kendala yang Sedang Berjalan</h2>
+          <button class="btn ghost" id="isuAlertGotoBtn" style="padding:6px 12px; font-size:12px;">Lihat Semua →</button>
+        </div>
+        <div class="issues-list" id="isuAlertList"></div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="tile">
+          <div class="label">Produksi Hari Ini</div>
+          <div class="value" id="kpiProduction">–</div>
+          <div class="sub" id="kpiProductionSub"></div>
+        </div>
+        <div class="tile">
+          <div class="label">Alat Ready / Total</div>
+          <div class="value" id="kpiEquipment">–</div>
+          <div class="bar-track"><div class="bar-fill" id="kpiEquipmentBar" style="width:0%"></div></div>
+          <div class="sub" id="kpiEquipmentSub"></div>
+        </div>
+        <div class="tile">
+          <div class="label">Total Manpower</div>
+          <div class="value" id="kpiManpower">–</div>
+          <div class="sub" id="kpiManpowerSub"></div>
+        </div>
+        <div class="tile">
+          <div class="label">Sisa Stok BBM</div>
+          <div class="value" id="kpiFuelStock">–</div>
+          <div class="sub" id="kpiFuelStockSub"></div>
+        </div>
+        <div class="tile">
+          <div class="label">Progress Kontrak</div>
+          <div class="value" id="kpiKontrak">–</div>
+          <div class="sub" id="kpiKontrakSub"></div>
+        </div>
+        <div class="tile">
+          <div class="label">Cuaca Hari Ini</div>
+          <div class="value" id="kpiWeather" style="font-size:16px;">–</div>
+          <div class="sub" id="kpiWeatherSub"></div>
+        </div>
+        <div class="tile">
+          <div class="label">Ritasi DT Hari Ini</div>
+          <div class="value" id="kpiRitasi">–</div>
+          <div class="sub" id="kpiRitasiSub"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <h2>Estimasi Cuaca — Rote Timur, Rote Ndao, NTT</h2>
+          <span id="weatherWidgetUpdatedOverview" class="weather-widget-updated" style="font-size:11px; color:var(--muted);"></span>
+        </div>
+        <div id="weatherWidgetBodyOverview" class="weather-widget-body empty-note">Memuat estimasi cuaca…</div>
+        <div class="contract-note" style="margin-top:10px;">Perkiraan cuaca dari layanan publik (Open-Meteo), koordinat perkiraan pusat Kecamatan Rote Timur. Estimasi otomatis, bukan pengganti laporan cuaca lapangan di menu Cuaca — hanya bisa dimuat kalau perangkat kamu terhubung internet.</div>
+      </div>
+
+      <div class="chart-row">
+        <div class="card">
+          <div class="card-head"><h2>Progress per Item Pekerjaan (% dari Volume Kontrak)</h2></div>
+          <div class="chart-wrap" style="height:280px;"><canvas id="productionChart"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>BBM Masuk vs Keluar (Liter)</h2></div>
+          <div class="chart-wrap"><canvas id="fuelChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Catatan &amp; Kendala Terbaru</h2></div>
+        <div class="issues-list" id="issuesList"></div>
+      </div>
+    </section>
+
+    <!-- ================= PRODUKSI HARIAN ================= -->
+    <section id="view-produksi" class="view-section">
+      <h1>Produksi Harian</h1>
+      <p class="subtitle" id="produksiSubtitle"></p>
+      <div class="filters-row">
+        <select id="produksiProjectFilter"></select>
+        <select id="produksiTypeFilter">
+          <option value="all">Semua Jenis Pekerjaan</option>
+        </select>
+        <input type="text" id="produksiSearch" placeholder="Cari zona / alat / catatan…" style="min-width:200px;">
+      </div>
+      <table class="datatable">
+        <thead><tr><th>Tanggal</th><th>Jenis</th><th>Volume</th><th>Zona/Lokasi</th><th>Jenis Alat</th><th>Catatan</th><th></th></tr></thead>
+        <tbody id="produksiTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ================= RITASI DT ================= -->
+    <section id="view-ritasi" class="view-section">
+      <h1>Ritasi Dump Truck (DT)</h1>
+      <p class="subtitle" id="ritasiSubtitle">Catat jumlah rit angkut per unit DT setiap hari — volume total dihitung otomatis dari ritasi × kapasitas per rit.</p>
+
+      <div id="ritasiStockSingle" class="stock-row">
+        <div class="tile"><div class="label">Ritasi Hari Ini</div><div class="value" id="ritasiTotalToday">–</div></div>
+        <div class="tile"><div class="label">Ritasi Total S.d Saat Ini</div><div class="value" id="ritasiTotalCumulative">–</div></div>
+        <div class="tile"><div class="label">Total Volume Hari Ini</div><div class="value" id="ritasiVolumeToday">–</div></div>
+        <div class="tile"><div class="label">Volume Total S.d Saat Ini</div><div class="value" id="ritasiVolumeCumulative">–</div></div>
+        <div class="tile"><div class="label">Unit DT Aktif Hari Ini</div><div class="value" id="ritasiUnitsToday">–</div></div>
+      </div>
+
+      <div class="filters-row">
+        <select id="ritasiProjectFilter"></select>
+        <select id="ritasiUnitFilter"></select>
+        <input type="text" id="ritasiSearch" placeholder="Cari unit DT / catatan…" style="min-width:200px;">
+      </div>
+
+      <div id="ritasiUnitSummary" class="stock-row hidden" style="margin-bottom:14px;">
+        <div class="tile">
+          <div class="label">Ritasi Kumulatif Unit Terpilih (S.d Saat Ini)</div>
+          <div class="value" id="ritasiUnitCumulativeCount">–</div>
+          <div class="sub" id="ritasiUnitCumulativeSub"></div>
+        </div>
+      </div>
+
+      <table class="datatable">
+        <thead><tr><th>Tanggal</th><th>Unit DT</th><th>Jenis Pekerjaan</th><th>Jumlah Ritasi</th><th>Kapasitas/Rit (M3)</th><th>Total Volume (M3)</th><th>Catatan</th><th></th></tr></thead>
+        <tbody id="ritasiTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ================= BBM ================= -->
+    <section id="view-bbm" class="view-section">
+      <h1>BBM — Masuk / Keluar / Sisa Stok</h1>
+      <p class="subtitle" id="bbmSubtitle"></p>
+      <div class="filters-row">
+        <select id="bbmProjectFilter"></select>
+        <select id="bbmTypeFilter">
+          <option value="all">Semua Jenis</option>
+          <option value="masuk">BBM Masuk</option>
+          <option value="keluar">BBM Keluar</option>
+        </select>
+        <input type="text" id="bbmSearch" placeholder="Cari alat / sumber / catatan…" style="min-width:200px;">
+      </div>
+
+      <div id="bbmSaldoAwalRow" class="write-action" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; padding:8px 12px; border:1px dashed var(--border); border-radius:8px; background:var(--surface-2);">
+        <label for="bbmSaldoAwalInput" style="font-size:12.5px; margin:0;">Saldo Awal BBM (Liter, sebelum catatan pertama):</label>
+        <input type="number" step="0.1" min="0" id="bbmSaldoAwalInput" style="width:140px;">
+        <button type="button" class="btn ghost" id="bbmSaldoAwalSaveBtn" style="padding:6px 12px; font-size:12px;">Simpan</button>
+        <span style="font-size:11.5px; color:var(--muted);">Dipakai sebagai dasar perhitungan "Sisa Stok" — isi kalau proyek sudah punya stok BBM sebelum data ini mulai dicatat.</span>
+      </div>
+
+      <div id="bbmStockSingle" class="stock-row">
+        <div class="tile"><div class="label">BBM Masuk Hari Ini</div><div class="value" id="stockMasukToday">–</div></div>
+        <div class="tile"><div class="label">BBM Keluar Hari Ini</div><div class="value" id="stockKeluarToday">–</div></div>
+        <div class="tile"><div class="label">Sisa Stok Saat Ini</div><div class="value" id="stockSaldo">–</div></div>
+        <div class="tile"><div class="label">BBM Masuk S.d Saat Ini</div><div class="value" id="stockMasukCumulative">–</div></div>
+        <div class="tile"><div class="label">Total Pemakaian BBM S.d Saat Ini</div><div class="value" id="stockKeluarCumulative">–</div></div>
+      </div>
+      <div id="bbmStockAll" class="stock-breakdown"></div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <h2>Tabulasi Pemakaian BBM per Alat (S.d Saat Ini)</h2>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="file" id="bbm-upload-input" accept=".xlsx,.xls" hidden>
+            <button class="btn ghost write-action" id="bbmUploadBtn" type="button">📤 Upload dari Excel</button>
+            <button class="btn ghost" id="bbmExportBtn" type="button">⬇️ Download Excel</button>
+          </div>
+        </div>
+        <div class="contract-note" style="margin-top:0; margin-bottom:12px;">Total pemakaian BBM tiap alat dari awal sampai saat ini — untuk pemberitahuan/rekap, mengikuti daftar armada di menu Alat. Tombol download menghasilkan file .xlsx dengan rekap per alat ini plus ringkasan masuk/keluar/saldo. Tombol upload membaca file Excel dengan baris header berkolom "Tanggal", "Jenis" (isi Masuk/Keluar), "Alat"/"Sumber", dan "Liter" (nama kolom lain di sheet bebas, kolom-kolom ini dicari otomatis) — lalu mengganti data BBM proyek ini untuk rentang tanggal yang ada di file.</div>
+        <table class="datatable">
+          <thead><tr><th>No</th><th>Nama Alat</th><th>Jenis</th><th>Total Pemakaian BBM (Liter)</th></tr></thead>
+          <tbody id="bbmPerAlatTbody"></tbody>
+        </table>
+      </div>
+
+      <table class="datatable">
+        <thead><tr><th>Tanggal</th><th>Jenis</th><th>Alat / Sumber</th><th>Liter</th><th>Saldo Setelah</th><th>Catatan</th><th></th></tr></thead>
+        <tbody id="bbmTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ================= ALAT ================= -->
+    <section id="view-alat" class="view-section">
+      <h1>Alat</h1>
+      <p class="subtitle" id="alatSubtitle">Tabulasi status armada alat per unit — diperbarui saat ada perubahan status, bukan isian harian.</p>
+
+      <div id="alatStockSingle" class="stock-row">
+        <div class="tile"><div class="label">Total Unit Alat</div><div class="value" id="alatTotalUnit">–</div></div>
+        <div class="tile"><div class="label">Alat Ready</div><div class="value" id="alatReadyUnit">–</div></div>
+        <div class="tile"><div class="label">Perbaikan / Maintenance</div><div class="value" id="alatPerbaikanUnit">–</div></div>
+        <div class="tile"><div class="label">Standby</div><div class="value" id="alatStandbyUnit">–</div></div>
+      </div>
+
+      <div class="filters-row">
+        <select id="alatProjectFilter"></select>
+        <select id="alatJenisFilter">
+          <option value="all">Semua Jenis</option>
+        </select>
+        <select id="alatStatusFilter">
+          <option value="all">Semua Status</option>
+          <option value="Ready">Ready</option>
+          <option value="Perbaikan">Perbaikan/Maintenance</option>
+          <option value="Standby">Standby</option>
+        </select>
+        <input type="text" id="alatSearch" placeholder="Cari nama alat / catatan…" style="min-width:200px;">
+      </div>
+      <table class="datatable">
+        <thead><tr><th>Nama Alat</th><th>Jenis</th><th>Status</th><th>Catatan</th><th></th></tr></thead>
+        <tbody id="alatTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ================= MANPOWER ================= -->
+    <section id="view-manpower" class="view-section">
+      <h1>Manpower</h1>
+      <p class="subtitle" id="manpowerSubtitle">Tabulasi jumlah tenaga kerja per jabatan — diperbarui saat ada perubahan, bukan isian harian.</p>
+
+      <div id="manpowerStockSingle" class="stock-row">
+        <div class="tile"><div class="label">Total Manpower</div><div class="value" id="manpowerTotalToday">–</div></div>
+        <div class="tile"><div class="label">Jumlah Jabatan</div><div class="value" id="manpowerRolesToday">–</div></div>
+      </div>
+
+      <div class="filters-row">
+        <select id="manpowerProjectFilter"></select>
+        <input type="text" id="manpowerSearch" placeholder="Cari jabatan / catatan…" style="min-width:200px;">
+      </div>
+      <table class="datatable">
+        <thead><tr><th>Jabatan</th><th>Jumlah Orang</th><th>Catatan</th><th></th></tr></thead>
+        <tbody id="manpowerTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ================= CUACA ================= -->
+    <section id="view-cuaca" class="view-section">
+      <h1>Laporan Cuaca</h1>
+      <p class="subtitle" id="cuacaSubtitle"></p>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <h2>Estimasi Cuaca — Rote Timur, Rote Ndao, NTT</h2>
+          <span id="weatherWidgetUpdated" class="weather-widget-updated" style="font-size:11px; color:var(--muted);"></span>
+        </div>
+        <div id="weatherWidgetBody" class="weather-widget-body empty-note">Memuat estimasi cuaca…</div>
+        <div class="contract-note" style="margin-top:10px;">Perkiraan cuaca dari layanan publik (Open-Meteo), koordinat perkiraan pusat Kecamatan Rote Timur. Ini estimasi otomatis, bukan pengganti laporan cuaca lapangan di bawah — dan hanya bisa dimuat kalau perangkat kamu terhubung internet.</div>
+      </div>
+
+      <div class="filters-row">
+        <select id="cuacaProjectFilter"></select>
+      </div>
+      <table class="datatable">
+        <thead><tr><th>Tanggal</th><th>Kondisi</th><th>Curah Hujan</th><th>Jam Terhambat</th><th>Catatan</th><th></th></tr></thead>
+        <tbody id="cuacaTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ================= DOKUMEN ================= -->
+    <section id="view-dokumen" class="view-section">
+      <h1 id="dokumenTitle">Dokumen</h1>
+      <p class="subtitle" id="dokumenSubtitle">Dikelompokkan per folder — maks. 15MB per file (khusus GeoPDF maks. 70MB). Semua folder dilindungi password kecuali GeoPDF.</p>
+      <div class="filters-row" id="dokumenFilters">
+        <select id="dokumenProjectFilter"></select>
+      </div>
+      <div class="filters-row" id="dokumenFolderActions">
+        <button class="addbtn folder-add-btn hidden" id="addFolderBtn" type="button">+ Folder Baru</button>
+      </div>
+
+      <button class="folder-back hidden" id="dokumenBackBtn">← Kembali ke Folder</button>
+
+      <div class="folder-grid" id="dokumenFolderGrid"></div>
+
+      <div class="password-gate hidden" id="dokumenPasswordGate">
+        <div class="lock-icon">🔒</div>
+        <div style="font-weight:700;" id="dokumenPasswordTitle">Folder Ini Dilindungi Password</div>
+        <div class="subtitle" style="margin:6px 0 0;">Hanya orang tertentu yang boleh membuka folder ini.</div>
+        <input type="password" id="tagihanPasswordInput" placeholder="Masukkan password">
+        <div class="pw-error" id="tagihanPasswordError"></div>
+        <button class="btn primary" id="tagihanPasswordSubmit">Buka Folder</button>
+      </div>
+
+      <div class="doc-grid hidden" id="dokumenGrid"></div>
+    </section>
+
+    <!-- ================= ISU EKSTERNAL & INTERNAL ================= -->
+    <section id="view-isu" class="view-section">
+      <h1>Isu Eksternal &amp; Internal</h1>
+      <p class="subtitle" id="isuSubtitle">Catatan isu/kendala yang sedang berjalan selama masa kerja proyek — isu sosial masyarakat, pembebasan lahan, keterlambatan desain, dll.</p>
+      <div class="filters-row">
+        <select id="isuProjectFilter"></select>
+        <select id="isuKategoriFilter">
+          <option value="all">Semua Kategori</option>
+          <option value="internal">Internal</option>
+          <option value="eksternal">Eksternal</option>
+        </select>
+        <select id="isuStatusFilter">
+          <option value="all">Semua Status</option>
+          <option value="berjalan">Berjalan</option>
+          <option value="selesai">Selesai</option>
+        </select>
+        <input type="text" id="isuSearch" placeholder="Cari judul / deskripsi…" style="min-width:200px;">
+      </div>
+      <table class="datatable">
+        <thead><tr><th>Tanggal</th><th>Kategori</th><th>Judul</th><th>Status</th><th>Deskripsi</th><th>Foto Bukti</th><th></th></tr></thead>
+        <tbody id="isuTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ================= BOBOT KONTRAK ================= -->
+    <section id="view-kontrak" class="view-section">
+      <h1>Realisasi Progres S.d ini</h1>
+      <p class="subtitle" id="kontrakSubtitle">Volume kontrak (BOQ) per item — realisasi otomatis terisi dari Produksi Harian item yang sama.</p>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <h2>Kurva-S — Rencana vs Realisasi Progress</h2>
+          <button class="btn ghost write-action" id="manageRencanaBtn" type="button">⚙️ Kelola Rencana</button>
+        </div>
+        <div class="contract-note" style="margin-top:0; margin-bottom:12px;">Garis <b>Rencana</b> memakai titik target kumulatif (%) yang diisi manual (tombol "Kelola Rencana") — biasanya dari jadwal/kurva-S dokumen kontrak. Garis <b>Realisasi</b> dihitung otomatis dari Bobot Tercapai (sama seperti tabel di bawah), diplot dari setiap tanggal ada laporan Produksi Harian.</div>
+        <div class="chart-wrap" style="height:280px;"><canvas id="kurvaSChart"></canvas></div>
+        <div class="sub" id="kurvaSDeviasi" style="font-size:13px; margin-top:10px;">–</div>
+      </div>
+
+      <div class="contract-summary">
+        <div class="card">
+          <div class="card-head"><h2>Progress Kumulatif (Bobot Tercapai)</h2></div>
+          <div class="progress-gauge">
+            <div class="pg-value" id="kontrakProgressValue">0%</div>
+            <div class="pg-track"><div class="pg-fill" id="kontrakProgressFill" style="width:0%"></div></div>
+          </div>
+          <div class="contract-note" style="margin-top:10px;">Bobot tiap item mengikuti persentase resmi dari dokumen kontrak (lihat catatan di bawah tabel).</div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Ringkasan</h2></div>
+          <div class="sub" id="kontrakSummaryText" style="font-size:13px; line-height:1.8;">–</div>
+        </div>
+      </div>
+
+      <div class="filters-row">
+        <select id="kontrakProjectFilter"></select>
+      </div>
+
+      <table class="datatable">
+        <thead><tr><th>No</th><th>Uraian Pekerjaan</th><th>Satuan</th><th>Volume Kontrak</th><th>Bobot (%)</th><th>Volume Tercapai</th><th>% Item</th><th>Bobot Tercapai</th><th></th></tr></thead>
+        <tbody id="kontrakTbody"></tbody>
+      </table>
+      <div class="contract-note" style="margin-top:10px;">
+        Catatan: Bobot (%) memakai angka resmi dari tabel kontrak yang dikirim (bukan lagi perkiraan dari proporsi volume). Kalau nambah item kontrak baru lewat form dan kolom Bobot (%) dikosongkan, sistem akan hitung otomatis dari proporsi volume sebagai perkiraan sementara sampai angka resminya diisi. Item pekerjaan di form Produksi Harian mengikuti persis daftar item kontrak ini, jadi Volume Tercapai selalu otomatis dari total laporan Produksi Harian untuk item itu — tidak ada risiko dobel hitung antar item.
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ================= MODALS ================= -->
+
+<div class="modal-overlay hidden" id="modal-produksi">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="produksi-modal-title">Tambah Laporan Produksi</h2>
+    <p class="subtitle" style="margin-bottom:0;">Jenis pekerjaan mengikuti daftar item Realisasi Progres S.d ini proyek ini.</p>
+    <form id="form-produksi">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="p-project" required></select></div>
+        <div class="form-field"><label>Tanggal</label><input type="date" id="p-date" required></div>
+        <div class="form-field full">
+          <label>Jenis Pekerjaan (Item Kontrak)</label>
+          <select id="p-workType" required></select>
+        </div>
+        <div class="form-field"><label>Volume</label><input type="number" step="0.1" min="0" id="p-volume" required></div>
+        <div class="form-field"><label>Satuan</label><input type="text" id="p-unit" readonly></div>
+        <div class="form-field"><label>Zona / Lokasi</label><input type="text" id="p-zona" placeholder="mis. STA 0+000 - 0+500"></div>
+        <div class="form-field full">
+          <label>Jenis Alat yang Digunakan</label>
+          <div class="checkbox-group" id="p-equipmentTypes"></div>
+        </div>
+        <div class="form-field full"><label>Detail Alat / Unit (opsional)</label><input type="text" id="p-equipment" placeholder="mis. Excavator PC200 - EX01, Dump Truck 5 unit"></div>
+        <div class="form-field full"><label>Catatan / Kendala (opsional)</label><textarea id="p-notes"></textarea></div>
+      </div>
+      <div class="form-error" id="p-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="p-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-ritasi">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="ritasi-modal-title">Tambah Ritasi DT</h2>
+    <p class="subtitle" style="margin-bottom:0;">Total volume dihitung otomatis (Jumlah Ritasi × Kapasitas per Rit).</p>
+    <form id="form-ritasi">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="r-project" required></select></div>
+        <div class="form-field"><label>Tanggal</label><input type="date" id="r-date" required></div>
+        <div class="form-field"><label>Unit DT</label><select id="r-unit" required></select></div>
+        <div class="form-field full">
+          <label>Jenis Pekerjaan (opsional)</label>
+          <select id="r-workType"><option value="">– Tidak dikaitkan ke item kontrak –</option></select>
+        </div>
+        <div class="form-field"><label>Jumlah Ritasi</label><input type="number" step="1" min="0" id="r-count" required></div>
+        <div class="form-field"><label>Kapasitas per Rit (M3)</label><input type="number" step="0.1" min="0" id="r-capacity" value="6" required></div>
+        <div class="form-field"><label>Total Volume (M3)</label><input type="text" id="r-total" readonly></div>
+        <div class="form-field full"><label>Catatan (opsional)</label><textarea id="r-notes"></textarea></div>
+      </div>
+      <div class="form-error" id="r-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="r-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-bbm">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="bbm-modal-title">Tambah Data BBM</h2>
+    <p class="subtitle" style="margin-bottom:0;">Catat BBM masuk (pengiriman) atau keluar (pemakaian alat) — saldo stok dihitung otomatis.</p>
+    <form id="form-bbm">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="f-project" required></select></div>
+        <div class="form-field"><label>Tanggal</label><input type="date" id="f-date" required></div>
+        <div class="form-field">
+          <label>Jenis</label>
+          <select id="f-type" required>
+            <option value="keluar">BBM Keluar (pemakaian alat)</option>
+            <option value="masuk">BBM Masuk (pengiriman)</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Liter</label><input type="number" step="0.1" min="0" id="f-liters" required></div>
+        <div class="form-field full"><label id="f-equipment-label">Alat</label><select id="f-equipment" required></select></div>
+        <div class="form-field full"><label>Catatan (opsional)</label><textarea id="f-notes"></textarea></div>
+      </div>
+      <div class="form-error" id="f-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="f-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-alat">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="alat-modal-title">Tambah Data Alat</h2>
+    <p class="subtitle" style="margin-bottom:0;">Status alat per unit — pilih dari daftar armada, tidak perlu ketik manual.</p>
+    <form id="form-alat">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="a-project" required></select></div>
+        <div class="form-field full"><label>Nama Alat</label><select id="a-nama" required></select></div>
+        <div class="form-field"><label>Jenis</label><input type="text" id="a-jenis" readonly></div>
+        <div class="form-field">
+          <label>Status</label>
+          <select id="a-status" required>
+            <option value="Ready">Ready</option>
+            <option value="Perbaikan">Perbaikan/Maintenance</option>
+            <option value="Standby">Standby</option>
+          </select>
+        </div>
+        <div class="form-field full"><label>Catatan (opsional)</label><textarea id="a-notes"></textarea></div>
+      </div>
+      <div class="form-error" id="a-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="a-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-manpower">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="manpower-modal-title">Tambah Data Manpower</h2>
+    <p class="subtitle" style="margin-bottom:0;">Jumlah orang per jabatan saat ini — bukan isian harian, cukup diperbarui saat ada perubahan.</p>
+    <form id="form-manpower">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="m-project" required></select></div>
+        <div class="form-field full"><label>Jabatan</label><input type="text" id="m-jabatan" list="jabatanOptions" placeholder="mis. Operator Alat Berat" required></div>
+        <datalist id="jabatanOptions"></datalist>
+        <div class="form-field"><label>Jumlah Orang</label><input type="number" min="0" id="m-jumlah" required></div>
+        <div class="form-field full"><label>Catatan (opsional)</label><textarea id="m-notes"></textarea></div>
+      </div>
+      <div class="form-error" id="m-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="m-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-cuaca">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="cuaca-modal-title">Tambah Laporan Cuaca</h2>
+    <form id="form-cuaca">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="w-project" required></select></div>
+        <div class="form-field"><label>Tanggal</label><input type="date" id="w-date" required></div>
+        <div class="form-field">
+          <label>Kondisi</label>
+          <select id="w-condition" required>
+            <option value="cerah">Cerah</option>
+            <option value="berawan">Berawan</option>
+            <option value="hujan_ringan">Hujan Ringan</option>
+            <option value="hujan_lebat">Hujan Lebat</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Curah Hujan (mm, opsional)</label><input type="number" step="0.1" min="0" id="w-rainfall"></div>
+        <div class="form-field"><label>Jam Terhambat (opsional)</label><input type="number" step="0.1" min="0" id="w-hours"></div>
+        <div class="form-field full"><label>Catatan (opsional)</label><textarea id="w-notes"></textarea></div>
+      </div>
+      <div class="form-error" id="w-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="w-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-dokumen">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2>Upload Dokumen</h2>
+    <p class="subtitle" style="margin-bottom:0;">PDF, DWG, atau DXF.</p>
+    <form id="form-dokumen">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="d-project" required></select></div>
+        <div class="form-field">
+          <label>Folder</label>
+          <select id="d-folder" required></select>
+        </div>
+        <div class="form-field full">
+          <label>File</label>
+          <input type="file" id="d-file" accept=".pdf,.dwg,.dxf" required>
+          <div class="file-size-hint" id="d-size-hint">Maks. 15MB</div>
+        </div>
+        <div class="form-field full"><label>Deskripsi (opsional)</label><input type="text" id="d-description" placeholder="mis. Gambar kerja cut & fill zona A rev.2"></div>
+      </div>
+      <div class="form-error" id="d-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="d-submit">Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-kontrak">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="kontrak-modal-title">Tambah Item Kontrak</h2>
+    <p class="subtitle" style="margin-bottom:0;">Item BOQ (Bill of Quantity) — akan otomatis muncul sebagai pilihan Jenis Pekerjaan di Produksi Harian.</p>
+    <form id="form-kontrak">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="k-project" required></select></div>
+        <div class="form-field"><label>No</label><input type="number" min="1" id="k-no" required></div>
+        <div class="form-field full"><label>Uraian Pekerjaan</label><input type="text" id="k-uraian" placeholder="mis. Penggalian tanah biasa" required></div>
+        <div class="form-field"><label>Satuan</label><input type="text" id="k-satuan" placeholder="mis. M3, M2, Ls" required></div>
+        <div class="form-field"><label>Volume Kontrak</label><input type="number" step="0.01" min="0" id="k-volume" required></div>
+        <div class="form-field"><label>Bobot (%) — opsional</label><input type="number" step="0.000001" min="0" max="100" id="k-bobot" placeholder="Kosongkan = hitung otomatis dari volume"></div>
+        <div class="form-field full"><label>Catatan (opsional)</label><textarea id="k-notes"></textarea></div>
+      </div>
+      <div class="form-error" id="k-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="k-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-rencana">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2>Kelola Rencana Kurva-S</h2>
+    <p class="subtitle" style="margin-bottom:0;">Titik target progres kumulatif (%) per tanggal — dipakai sebagai garis Rencana di grafik Kurva-S.</p>
+    <div style="margin:14px 0;">
+      <div style="font-size:11.5px; color:var(--muted); margin-bottom:8px;">File harus punya sheet bernama <b>"Kurva S"</b> (kolom Tanggal Selesai &amp; Kum. Rencana (%), seperti file Time Schedule yang biasa dipakai). Semua titik rencana lama untuk proyek ini akan <b>diganti</b> dengan isi file.</div>
+      <input type="file" id="rc-upload-input" accept=".xlsx,.xls" hidden>
+      <button type="button" class="btn ghost" id="rc-upload-btn">📤 Pilih File Excel...</button>
+      <span id="rc-upload-filename" style="font-size:11.5px; color:var(--muted); margin-left:8px;"></span>
+    </div>
+    <form id="form-rencana">
+      <div class="form-grid">
+        <div class="form-field"><label>Tanggal</label><input type="date" id="rc-date" required></div>
+        <div class="form-field"><label>Target Progres Kumulatif (%)</label><input type="number" step="0.01" min="0" max="100" id="rc-target" required></div>
+      </div>
+      <div class="form-error" id="rc-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="submit" class="btn primary" id="rc-submit">Tambah Titik</button>
+      </div>
+    </form>
+    <table class="datatable" style="margin-top:14px;">
+      <thead><tr><th>Tanggal</th><th>Target Kumulatif (%)</th><th></th></tr></thead>
+      <tbody id="rencanaTbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-isu">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="isu-modal-title">Tambah Isu</h2>
+    <p class="subtitle" style="margin-bottom:0;">Catat isu/kendala yang sedang berjalan — isu sosial masyarakat, pembebasan lahan, keterlambatan desain, dll.</p>
+    <form id="form-isu">
+      <div class="form-grid">
+        <div class="form-field"><label>Proyek</label><select id="isu-project" required></select></div>
+        <div class="form-field"><label>Tanggal</label><input type="date" id="isu-date" required></div>
+        <div class="form-field">
+          <label>Kategori</label>
+          <select id="isu-kategori" required>
+            <option value="eksternal">Eksternal</option>
+            <option value="internal">Internal</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Status</label>
+          <select id="isu-status" required>
+            <option value="berjalan">Berjalan</option>
+            <option value="selesai">Selesai</option>
+          </select>
+        </div>
+        <div class="form-field full"><label>Judul</label><input type="text" id="isu-judul" placeholder="mis. Keluhan warga sekitar area kerja" required></div>
+        <div class="form-field full"><label>Deskripsi (opsional)</label><textarea id="isu-deskripsi"></textarea></div>
+        <div class="form-field full">
+          <label>Foto Bukti (opsional)</label>
+          <input type="file" id="isu-foto" accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif" hidden>
+          <button type="button" class="photo-add-tile" id="isu-foto-tile">
+            <span class="photo-add-plus">+</span>
+            <span class="photo-add-label">Tambah Foto</span>
+          </button>
+          <div class="file-size-hint">Sebagai bukti resmi isu ini memang terjadi — format JPG, JPEG, PNG, atau HEIC (termasuk foto langsung dari iPhone).</div>
+        </div>
+      </div>
+      <div class="form-error" id="isu-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="isu-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-folder-baru">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2>Buat Folder Dokumen Baru</h2>
+    <p class="subtitle" style="margin-bottom:0;">Folder baru langsung muncul di menu Dokumen — tidak perlu ubah kode/website.</p>
+    <form id="form-folder-baru">
+      <div class="form-grid">
+        <div class="form-field full"><label>Nama Folder</label><input type="text" id="fb-nama" placeholder="mis. Surat Izin Kerja" required></div>
+        <div class="form-field"><label>Ikon (emoji, opsional)</label><input type="text" id="fb-icon" placeholder="📁" maxlength="4"></div>
+        <div class="form-field"><label>Maks. Ukuran File (MB)</label><input type="number" min="1" max="200" id="fb-maxmb" value="15" required></div>
+        <div class="form-field full">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="fb-protected" style="width:auto;">
+            Lindungi folder ini dengan password dokumen
+          </label>
+        </div>
+      </div>
+      <div class="form-error" id="fb-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="fb-submit">Buat Folder</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= LOGIN PENGELOLA ================= -->
+<div class="modal-overlay hidden" id="modal-login">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2>Masuk sebagai Pengelola</h2>
+    <p class="subtitle" style="margin-bottom:0;">Tiap akun pengelola aksesnya beda-beda: Pemilik bisa buka semua menu, Pengelola BBM cuma menu BBM, Pengelola Alat cuma menu Alat. Kalau tidak login, tetap bisa lihat & download data di semua menu, tapi tidak bisa tambah/edit/hapus.</p>
+    <form id="form-login">
+      <div class="form-grid">
+        <div class="form-field full"><label>Username</label><input type="text" id="login-username" autocomplete="username" required></div>
+        <div class="form-field full"><label>Password</label><input type="password" id="login-password" autocomplete="current-password" required></div>
+      </div>
+      <div class="form-error" id="login-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary">Masuk</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ================= CHAT BANTUAN & PENGEMBANGAN ================= -->
+<button class="help-fab" id="helpFabBtn" title="Bantuan & Pengembangan">💬</button>
+<div class="help-panel hidden" id="helpPanel">
+  <div class="help-panel-head">
+    <div>
+      <div style="font-weight:700;">Chat Bantuan &amp; Pengembangan</div>
+      <div style="font-size:11px; color:var(--muted);">Ada bug atau usulan fitur? Kabari lewat sini.</div>
+    </div>
+    <button class="close" id="helpPanelClose">✕</button>
+  </div>
+
+  <div class="help-panel-tabs">
+    <button class="help-tab active" data-tab="quick">Kontak Cepat</button>
+    <button class="help-tab" data-tab="chat">Chat Internal</button>
+  </div>
+
+  <div class="help-panel-body help-tab-content" id="helpTabQuick">
+    <div class="help-bot-msg">👋 Halo! Ada pertanyaan, kendala, atau usulan pengembangan untuk website ini? Hubungi langsung lewat WhatsApp atau email di bawah ini.</div>
+    <a class="help-contact-btn wa" href="https://wa.me/6281279474356" target="_blank" rel="noopener">
+      <span class="help-contact-icon">📱</span>
+      <span><div class="help-contact-label">WhatsApp</div><div class="help-contact-value">+62 812-7947-4356</div></span>
+    </a>
+    <a class="help-contact-btn mail" href="mailto:rasyid.alamsyah@pt-bpa.com">
+      <span class="help-contact-icon">✉️</span>
+      <span><div class="help-contact-label">Email</div><div class="help-contact-value">rasyid.alamsyah@pt-bpa.com</div></span>
+    </a>
+  </div>
+
+  <div class="help-panel-body help-tab-content hidden" id="helpTabChat">
+    <div class="help-bot-msg">Kirim pesan langsung ke sistem — tersimpan di website ini dan hanya bisa dibaca oleh pengelola yang terdaftar (butuh login/password pengelola).</div>
+    <form id="form-internal-chat">
+      <input type="text" id="chat-from" placeholder="Nama kamu (opsional)" style="width:100%; margin-bottom:8px; padding:9px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13px; box-sizing:border-box;">
+      <textarea id="chat-message" placeholder="Tulis pesan untuk pengelola..." required style="width:100%; min-height:64px; margin-bottom:8px; padding:9px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:13px; box-sizing:border-box; resize:vertical;"></textarea>
+      <button type="submit" class="btn primary" style="width:100%;">Kirim ke Pengelola</button>
+    </form>
+
+    <div class="help-chat-divider"></div>
+
+    <div id="pengelolaChatArea"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/app.js" defer></script>
+</body>
+</html>

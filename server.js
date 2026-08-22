@@ -4,7 +4,7 @@ const multer = require("multer");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
-const { pool, init, WEATHER_CONDITIONS, ISU_KATEGORI_VALUES, ISU_STATUS_VALUES } = require("./db");
+const { pool, init, WEATHER_CONDITIONS, ISU_KATEGORI_VALUES, ISU_STATUS_VALUES, ISU_KEPARAHAN_VALUES } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -182,13 +182,18 @@ function rowToWeather(r) {
 function rowToDocument(r) {
   return { id: r.id, projectId: r.project_id, folder: r.folder, filename: r.filename, filetype: r.filetype, filesize: r.filesize, description: r.description || "", uploadedAt: r.uploaded_at, blobUrl: `/api/documents/${r.id}/file` };
 }
-function rowToChat(r) {
-  return { id: r.id, from: r.from_name, message: r.message, createdAt: r.created_at };
+function rowToChatMessage(r) {
+  return { id: r.id, sessionId: r.session_id, from: r.from_role, authorName: r.from_name, text: r.message, createdAt: r.created_at };
+}
+function rowToChatSession(r) {
+  return { id: r.id, visitorName: r.visitor_name, pengelolaUnread: !!r.pengelola_unread, visitorUnread: !!r.visitor_unread, createdAt: r.created_at };
 }
 function rowToIsu(r) {
   return {
     id: r.id, projectId: r.project_id, date: r.date, kategori: r.kategori, status: r.status,
     judul: r.judul, deskripsi: r.deskripsi || "",
+    tindakanPerbaikan: r.tindakan_perbaikan || "",
+    keparahan: r.keparahan || null,
     foto: r.foto_mime ? `/api/isu/${r.id}/photo` : null,
     createdAt: r.created_at,
   };
@@ -217,14 +222,14 @@ app.get("/api/bootstrap", async (req, res, next) => {
       pool.query("SELECT * FROM weather_logs ORDER BY date DESC, id DESC"),
       pool.query("SELECT id, project_id, folder, filename, filetype, filesize, description, uploaded_at FROM documents ORDER BY uploaded_at DESC"),
       pool.query("SELECT id, project_id FROM project_photos ORDER BY id"),
-      pool.query("SELECT id, project_id, date, kategori, status, judul, deskripsi, foto_mime, created_at FROM isu_reports ORDER BY date DESC, id DESC"),
+      pool.query("SELECT id, project_id, date, kategori, status, judul, deskripsi, tindakan_perbaikan, keparahan, foto_mime, created_at FROM isu_reports ORDER BY date DESC, id DESC"),
       pool.query("SELECT * FROM document_folders ORDER BY sort_order, created_at"),
       pool.query("SELECT * FROM rencana_progress ORDER BY project_id, date"),
       pool.query("SELECT project_id, saldo FROM fuel_opening_balance"),
     ]);
     const photosByProject = {};
     photos.rows.forEach((p) => {
-      (photosByProject[p.project_id] = photosByProject[p.project_id] || []).push(`/api/photos/${p.id}/file`);
+      (photosByProject[p.project_id] = photosByProject[p.project_id] || []).push({ id: p.id, url: `/api/photos/${p.id}/file` });
     });
     const fuelOpeningBalanceByProject = {};
     fuelOpeningBalance.rows.forEach((r) => { fuelOpeningBalanceByProject[r.project_id] = Number(r.saldo); });
@@ -743,7 +748,9 @@ function validateIsuFields(b, errors) {
   if (!ISU_KATEGORI_VALUES.includes(b.kategori)) errors.push("kategori tidak valid");
   if (!ISU_STATUS_VALUES.includes(b.status)) errors.push("status tidak valid");
   if (!b.judul || !String(b.judul).trim()) errors.push("judul wajib diisi");
+  if (b.kategori === "k3" && b.keparahan && !ISU_KEPARAHAN_VALUES.includes(b.keparahan)) errors.push("keparahan tidak valid");
 }
+function isuKeparahanValue(b) { return b.kategori === "k3" && b.keparahan ? b.keparahan : null; }
 
 app.post("/api/isu", requireWrite("isu"), (req, res, next) => {
   uploadIsuPhoto.single("foto")(req, res, async (err) => {
@@ -755,10 +762,10 @@ app.post("/api/isu", requireWrite("isu"), (req, res, next) => {
       validateIsuFields(b, errors);
       if (errors.length) return res.status(400).json({ error: errors.join("; ") });
       const { rows } = await pool.query(
-        `INSERT INTO isu_reports (project_id, date, kategori, status, judul, deskripsi, foto_mime, foto_data)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         RETURNING id, project_id, date, kategori, status, judul, deskripsi, foto_mime, created_at`,
-        [b.projectId, b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", req.file ? req.file.mimetype : null, req.file ? req.file.buffer : null]
+        `INSERT INTO isu_reports (project_id, date, kategori, status, judul, deskripsi, tindakan_perbaikan, keparahan, foto_mime, foto_data)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING id, project_id, date, kategori, status, judul, deskripsi, tindakan_perbaikan, keparahan, foto_mime, created_at`,
+        [b.projectId, b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", (b.tindakanPerbaikan || "").trim(), isuKeparahanValue(b), req.file ? req.file.mimetype : null, req.file ? req.file.buffer : null]
       );
       res.status(201).json(rowToIsu(rows[0]));
     } catch (e) { next(e); }
@@ -774,24 +781,26 @@ app.put("/api/isu/:id", requireWrite("isu"), (req, res, next) => {
       validateIsuFields(b, errors);
       if (errors.length) return res.status(400).json({ error: errors.join("; ") });
       const id = Number(req.params.id);
+      const keparahan = isuKeparahanValue(b);
+      const tindakan = (b.tindakanPerbaikan || "").trim();
       let rows;
       if (req.file) {
         ({ rows } = await pool.query(
-          `UPDATE isu_reports SET date=$1, kategori=$2, status=$3, judul=$4, deskripsi=$5, foto_mime=$6, foto_data=$7 WHERE id=$8
-           RETURNING id, project_id, date, kategori, status, judul, deskripsi, foto_mime, created_at`,
-          [b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", req.file.mimetype, req.file.buffer, id]
+          `UPDATE isu_reports SET date=$1, kategori=$2, status=$3, judul=$4, deskripsi=$5, tindakan_perbaikan=$6, keparahan=$7, foto_mime=$8, foto_data=$9 WHERE id=$10
+           RETURNING id, project_id, date, kategori, status, judul, deskripsi, tindakan_perbaikan, keparahan, foto_mime, created_at`,
+          [b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", tindakan, keparahan, req.file.mimetype, req.file.buffer, id]
         ));
       } else if (b.removeFoto === "1" || b.removeFoto === "true") {
         ({ rows } = await pool.query(
-          `UPDATE isu_reports SET date=$1, kategori=$2, status=$3, judul=$4, deskripsi=$5, foto_mime=NULL, foto_data=NULL WHERE id=$6
-           RETURNING id, project_id, date, kategori, status, judul, deskripsi, foto_mime, created_at`,
-          [b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", id]
+          `UPDATE isu_reports SET date=$1, kategori=$2, status=$3, judul=$4, deskripsi=$5, tindakan_perbaikan=$6, keparahan=$7, foto_mime=NULL, foto_data=NULL WHERE id=$8
+           RETURNING id, project_id, date, kategori, status, judul, deskripsi, tindakan_perbaikan, keparahan, foto_mime, created_at`,
+          [b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", tindakan, keparahan, id]
         ));
       } else {
         ({ rows } = await pool.query(
-          `UPDATE isu_reports SET date=$1, kategori=$2, status=$3, judul=$4, deskripsi=$5 WHERE id=$6
-           RETURNING id, project_id, date, kategori, status, judul, deskripsi, foto_mime, created_at`,
-          [b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", id]
+          `UPDATE isu_reports SET date=$1, kategori=$2, status=$3, judul=$4, deskripsi=$5, tindakan_perbaikan=$6, keparahan=$7 WHERE id=$8
+           RETURNING id, project_id, date, kategori, status, judul, deskripsi, tindakan_perbaikan, keparahan, foto_mime, created_at`,
+          [b.date, b.kategori, b.status, b.judul.trim(), b.deskripsi || "", tindakan, keparahan, id]
         ));
       }
       if (!rows.length) return res.status(404).json({ error: "Isu tidak ditemukan." });
@@ -828,15 +837,15 @@ app.post("/api/photos", requireWrite("photos"), (req, res, next) => {
       const { projectId } = req.body || {};
       if (!projectId || !(await assertProjectExists(projectId))) return res.status(400).json({ error: "projectId tidak valid." });
       if (!req.files || !req.files.length) return res.status(400).json({ error: "Pilih minimal 1 foto." });
-      const urls = [];
+      const photos = [];
       for (const f of req.files) {
         const { rows } = await pool.query(
           `INSERT INTO project_photos (project_id, mime, file_data) VALUES ($1,$2,$3) RETURNING id`,
           [projectId, f.mimetype, f.buffer]
         );
-        urls.push(`/api/photos/${rows[0].id}/file`);
+        photos.push({ id: rows[0].id, url: `/api/photos/${rows[0].id}/file` });
       }
-      res.status(201).json({ urls });
+      res.status(201).json({ photos });
     } catch (e) { next(e); }
   });
 });
@@ -851,28 +860,109 @@ app.get("/api/photos/:id/file", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/* ---------------------------------------------------------------------
-   Chat internal — siapa saja bisa kirim, hanya Pengelola yang bisa baca
---------------------------------------------------------------------- */
-app.post("/api/chat", async (req, res, next) => {
+app.delete("/api/photos/:id", requireWrite("photos"), async (req, res, next) => {
   try {
-    const { from, message } = req.body || {};
-    const msg = (message || "").trim();
-    if (!msg) return res.status(400).json({ error: "Pesan tidak boleh kosong." });
-    const fromName = (from || "").trim() || "Anonim";
-    const { rows } = await pool.query(
-      `INSERT INTO chat_messages (from_name, message) VALUES ($1,$2) RETURNING *`,
-      [fromName, msg]
-    );
-    res.status(201).json(rowToChat(rows[0]));
+    const { rowCount } = await pool.query("DELETE FROM project_photos WHERE id=$1", [Number(req.params.id)]);
+    if (!rowCount) return res.status(404).json({ error: "Foto tidak ditemukan." });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
-app.get("/api/chat", async (req, res, next) => {
+/* ---------------------------------------------------------------------
+   Live Chat — pengunjung (tanpa login) bisa mulai sesi obrolan baru &
+   melanjutkan sesinya sendiri (dikenali lewat ID sesi yang disimpan di
+   localStorage browsernya, sama seperti versi preview — tidak ada
+   proteksi kepemilikan sesi di server, siapa pun yang tahu ID sesi bisa
+   baca/isi sesi itu; ini masalah kecil yang cukup aman untuk chat bantuan
+   ringan seperti ini). Pengelola (akun manapun yang login) bisa lihat
+   SEMUA sesi sebagai inbox & membalas satu per satu.
+--------------------------------------------------------------------- */
+async function loadChatSession(id) {
+  const { rows } = await pool.query("SELECT * FROM chat_sessions WHERE id=$1", [id]);
+  if (!rows.length) return null;
+  const { rows: msgRows } = await pool.query("SELECT * FROM chat_messages WHERE session_id=$1 ORDER BY id", [id]);
+  return { ...rowToChatSession(rows[0]), messages: msgRows.map(rowToChatMessage) };
+}
+
+// Pengunjung mulai sesi Live Chat baru (nama opsional + pesan pertama wajib).
+app.post("/api/chat/sessions", async (req, res, next) => {
   try {
-    if (!req.session || !req.session.role) return res.status(401).json({ error: "Login sebagai Pengelola diperlukan untuk membaca pesan." });
-    const { rows } = await pool.query("SELECT * FROM chat_messages ORDER BY created_at DESC");
-    res.json(rows.map(rowToChat));
+    const b = req.body || {};
+    const text = (b.message || "").trim();
+    if (!text) return res.status(400).json({ error: "Pesan tidak boleh kosong." });
+    const visitorName = (b.name || "").trim() || "Pengunjung";
+    const { rows } = await pool.query(
+      `INSERT INTO chat_sessions (visitor_name, pengelola_unread) VALUES ($1, true) RETURNING *`,
+      [visitorName]
+    );
+    const session = rows[0];
+    const { rows: msgRows } = await pool.query(
+      `INSERT INTO chat_messages (session_id, from_role, from_name, message) VALUES ($1,'visitor',$2,$3) RETURNING *`,
+      [session.id, visitorName, text]
+    );
+    res.status(201).json({ ...rowToChatSession(session), messages: msgRows.map(rowToChatMessage) });
+  } catch (err) { next(err); }
+});
+
+// Pengelola (akun manapun yang login) — daftar semua sesi + isi pesannya, dipakai untuk inbox.
+app.get("/api/chat/sessions", async (req, res, next) => {
+  try {
+    if (!req.session || !req.session.role) return res.status(401).json({ error: "Login sebagai Pengelola diperlukan." });
+    const { rows: sessions } = await pool.query("SELECT * FROM chat_sessions ORDER BY id");
+    const { rows: messages } = await pool.query("SELECT * FROM chat_messages ORDER BY id");
+    const bySession = {};
+    messages.forEach((m) => { (bySession[m.session_id] = bySession[m.session_id] || []).push(rowToChatMessage(m)); });
+    res.json(sessions.map((s) => ({ ...rowToChatSession(s), messages: bySession[s.id] || [] })));
+  } catch (err) { next(err); }
+});
+
+// Satu sesi (dipakai pengunjung untuk polling sesinya sendiri via ID tersimpan).
+app.get("/api/chat/sessions/:id", async (req, res, next) => {
+  try {
+    const session = await loadChatSession(Number(req.params.id));
+    if (!session) return res.status(404).json({ error: "Sesi chat tidak ditemukan." });
+    res.json(session);
+  } catch (err) { next(err); }
+});
+
+// Kirim pesan ke sebuah sesi — peran (visitor/pengelola) ditentukan server dari status login,
+// supaya pengunjung tidak bisa berpura-pura jadi Pengelola.
+app.post("/api/chat/sessions/:id/messages", async (req, res, next) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const b = req.body || {};
+    const text = (b.message || "").trim();
+    if (!text) return res.status(400).json({ error: "Pesan tidak boleh kosong." });
+    const session = await loadChatSession(sessionId);
+    if (!session) return res.status(404).json({ error: "Sesi chat tidak ditemukan." });
+
+    const isPengelola = !!(req.session && req.session.role);
+    const fromRole = isPengelola ? "pengelola" : (b.asBot ? "bot" : "visitor");
+    const fromName = isPengelola ? (req.session.label || "Pengelola") : (fromRole === "bot" ? "Bot Asisten" : session.visitorName);
+
+    const { rows } = await pool.query(
+      `INSERT INTO chat_messages (session_id, from_role, from_name, message) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [sessionId, fromRole, fromName, text]
+    );
+    if (fromRole !== "bot") {
+      await pool.query(
+        "UPDATE chat_sessions SET pengelola_unread=$1, visitor_unread=$2 WHERE id=$3",
+        [fromRole === "visitor", fromRole === "pengelola", sessionId]
+      );
+    }
+    res.status(201).json(rowToChatMessage(rows[0]));
+  } catch (err) { next(err); }
+});
+
+// Tandai sudah dibaca — dipanggil saat sisi yang bersangkutan membuka thread-nya.
+app.post("/api/chat/sessions/:id/read", async (req, res, next) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const isPengelola = !!(req.session && req.session.role);
+    const col = isPengelola ? "pengelola_unread" : "visitor_unread";
+    const { rowCount } = await pool.query(`UPDATE chat_sessions SET ${col}=false WHERE id=$1`, [sessionId]);
+    if (!rowCount) return res.status(404).json({ error: "Sesi chat tidak ditemukan." });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

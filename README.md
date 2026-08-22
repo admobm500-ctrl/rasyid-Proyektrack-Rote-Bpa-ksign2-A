@@ -6,21 +6,32 @@ alat, upload rekap dari Excel, Saldo Awal BBM, + download rekap Excel),
 Alat (tabulasi status per unit), Manpower (tabulasi per jabatan), Cuaca
 (laporan manual + widget cuaca live per-jam via Open-Meteo), Dokumen (folder
 Tagihan/DWG/BAOP berpassword + GeoPDF bebas, dan owner bisa bikin folder
-baru sendiri langsung dari website), Isu Eksternal & Internal (catatan
-isu/kendala yang sedang berjalan, dengan foto bukti JPG/PNG/JPEG/HEIC,
-otomatis muncul jadi pemberitahuan di Beranda selama masih berstatus
-"Berjalan"), foto proyek (lebih dari 1, bisa digeser), Realisasi Progres
-terhadap kontrak (dengan grafik Kurva-S Rencana vs Realisasi — titik rencana
-diisi manual atau upload dari Excel), dan Chat Internal. Menu disembunyikan
-di balik tombol ☰ di kanan atas topbar. Tema gelap. Data tersimpan permanen
-di database PostgreSQL — bisa dipakai lokal atau di-online-kan gratis lewat
-Render (hosting) + Neon (database).
+baru sendiri langsung dari website), Isu Eksternal, Internal & K3 (catatan
+isu/kendala yang sedang berjalan — khusus kategori K3 ada Tingkat Keparahan
+& Tindakan Perbaikan — dengan foto bukti JPG/PNG/JPEG/HEIC, otomatis muncul
+jadi pemberitahuan di Beranda selama masih berstatus "Berjalan"), Foto
+Proyek (lebih dari 1, bisa digeser, dan owner bisa buka galeri "Pilih /
+Hapus Foto" untuk pilih foto mana yang tampil di Beranda atau menghapusnya),
+Realisasi Progres terhadap kontrak (dengan grafik Kurva-S Rencana vs
+Realisasi — titik rencana diisi manual atau upload dari Excel), download
+rekap Excel di HAMPIR SEMUA menu (Produksi, Ritasi, Alat, Manpower, Cuaca,
+Isu, Realisasi Progres — selain BBM yang sudah ada duluan), tombol 🖨️ Cetak
+di topbar untuk cetak/simpan PDF halaman yang sedang dibuka, dan Live Chat
+(pengunjung bisa mulai obrolan tanpa login, Pengelola melihat semua obrolan
+sebagai inbox & membalas satu-satu, ada balasan otomatis bot ringan untuk
+pertanyaan umum). Menu disembunyikan di balik tombol ☰ di kanan atas topbar.
+Tema gelap. Data tersimpan permanen di database PostgreSQL — bisa dipakai
+lokal atau di-online-kan gratis lewat Render (hosting) + Neon (database).
 
-> **Update terbaru:** sebelumnya BBM cuma bisa diisi manual (belum bisa upload
-> rekap dari Excel), Saldo Awal BBM belum ada, dan grafik Kurva-S (Rencana vs
-> Realisasi progres) di menu Realisasi Progres S.d ini juga belum ada. Ketiga
-> fitur ini sudah ditambahkan — lihat bagian "Ringkasan API" di bawah untuk
-> endpoint barunya.
+> **Update terbaru:** paket ini disamakan fiturnya dengan versi HTML satu-file
+> yang sebelumnya sudah dikonfirmasi lengkap. Yang ditambahkan: (1) kategori
+> Isu **K3** lengkap dengan Tingkat Keparahan & Tindakan Perbaikan, (2) galeri
+> **Kelola Foto Proyek** (pilih foto yang tampil / hapus foto, bukan cuma
+> tambah), (3) **Download Excel** untuk semua menu tabel (sebelumnya cuma
+> BBM), (4) tombol **🖨️ Cetak** untuk cetak/PDF halaman yang aktif, (5)
+> **Live Chat** multi-sesi (pengunjung ↔ Pengelola, dulunya cuma satu papan
+> pesan searah), dan (6) ikon tab browser (favicon) sekarang logo BPA. Lihat
+> bagian "Ringkasan API" di bawah untuk endpoint barunya.
 
 ## Login Pengelola & hak akses
 
@@ -143,8 +154,8 @@ proyektrack-app/
 Semua endpoint mengembalikan/menerima JSON, kecuali upload/download file
 (`multipart/form-data` untuk upload, binary untuk download). Endpoint
 tambah/ubah/hapus data (`POST`/`PUT`/`DELETE`, selain `/api/login`,
-`/api/documents/unlock`, dan `/api/chat` POST) butuh login Pengelola dengan
-role yang sesuai — kalau tidak, server balas `401`/`403`.
+`/api/documents/unlock`, dan endpoint Live Chat) butuh login Pengelola
+dengan role yang sesuai — kalau tidak, server balas `401`/`403`.
 
 | Method | Endpoint                          | Keterangan |
 |--------|------------------------------------|------------|
@@ -167,14 +178,18 @@ role yang sesuai — kalau tidak, server balas `401`/`403`.
 | DELETE | `/api/documents/:id`               | Hapus dokumen (owner) |
 | POST   | `/api/doc-folders`                 | Bikin folder Dokumen baru (`label`, `icon`, `maxMb`, `protected`) — owner |
 | DELETE | `/api/doc-folders/:id`              | Hapus folder custom (bukan bawaan, dan harus kosong) — owner |
-| GET/POST/PUT/DELETE | `/api/isu[/:id]`      | Isu Eksternal & Internal, `POST`/`PUT` bisa sertakan file `foto` (JPG/PNG/JPEG/HEIC) — owner |
+| GET/POST/PUT/DELETE | `/api/isu[/:id]`      | Isu Eksternal, Internal & K3 — `POST`/`PUT` pakai `multipart/form-data`, field `tindakanPerbaikan` (opsional) & `keparahan` (wajib diisi kalau `kategori`=`k3`: `ringan`/`sedang`/`berat`/`fatal`), bisa sertakan file `foto` (JPG/PNG/JPEG/HEIC) — owner |
 | POST/DELETE | `/api/rencana[/:id]`         | Titik Rencana Kurva-S — `POST { projectId, date, targetPercent }` (menimpa titik lama di tanggal yang sama), `DELETE /:id` (owner) |
 | POST   | `/api/rencana/bulk-replace`        | Upload Kurva-S dari Excel — `{ projectId, points[] }`, mengganti SEMUA titik rencana proyek ini (owner) |
 | GET    | `/api/isu/:id/photo`               | Ambil foto bukti isu |
 | POST   | `/api/photos`                      | Upload foto proyek (`projectId`, `files[]`) — owner |
 | GET    | `/api/photos/:id/file`             | Ambil file foto |
-| POST   | `/api/chat`                        | Kirim pesan chat internal (siapa saja) |
-| GET    | `/api/chat`                        | Baca semua pesan (butuh login Pengelola, akun mana pun) |
+| DELETE | `/api/photos/:id`                  | Hapus 1 foto proyek — owner |
+| POST   | `/api/chat/sessions`               | Pengunjung mulai sesi Live Chat baru — `{ name, message }`, tidak perlu login |
+| GET    | `/api/chat/sessions`               | Daftar semua sesi Live Chat + isi pesannya, buat inbox Pengelola (butuh login, akun mana pun) |
+| GET    | `/api/chat/sessions/:id`           | Ambil 1 sesi + pesannya (dipakai pengunjung untuk polling sesinya sendiri) |
+| POST   | `/api/chat/sessions/:id/messages`  | Kirim pesan ke sebuah sesi — `{ message }`; pengirim (visitor/pengelola) ditentukan otomatis dari status login, tidak bisa dipalsukan lewat body request |
+| POST   | `/api/chat/sessions/:id/read`      | Tandai sesi sudah dibaca oleh sisi yang memanggil (Pengelola atau pengunjung) |
 
 **Catatan foto HEIC (Isu & foto proyek):** file HEIC disimpan & di-serve apa
 adanya (tidak dikonversi otomatis ke JPEG). Kebanyakan browser modern (Chrome,

@@ -25,8 +25,9 @@ const WEATHER_CONDITIONS = ["cerah", "berawan", "hujan_ringan", "hujan_lebat"];
 const EQUIPMENT_STATUS_VALUES = ["Ready", "Perbaikan", "Standby"];
 const FUEL_TYPES = ["masuk", "keluar"];
 const DOC_FOLDERS = ["tagihan", "dwg", "baop", "geopdf"];
-const ISU_KATEGORI_VALUES = ["internal", "eksternal"];
+const ISU_KATEGORI_VALUES = ["internal", "eksternal", "k3"];
 const ISU_STATUS_VALUES = ["berjalan", "selesai"];
+const ISU_KEPARAHAN_VALUES = ["ringan", "sedang", "berat", "fatal"];
 
 // Folder default Dokumen — dipakai sebagai seed awal tabel document_folders di
 // bawah. Setelah live, Pemilik (owner) bisa menambah folder baru langsung dari
@@ -267,15 +268,25 @@ async function initSchema() {
       id          SERIAL PRIMARY KEY,
       project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       date        TEXT NOT NULL,
-      kategori    TEXT NOT NULL CHECK (kategori IN ('internal','eksternal')),
+      kategori    TEXT NOT NULL CHECK (kategori IN ('internal','eksternal','k3')),
       status      TEXT NOT NULL CHECK (status IN ('berjalan','selesai')),
       judul       TEXT NOT NULL,
       deskripsi   TEXT,
+      tindakan_perbaikan TEXT,
+      keparahan   TEXT CHECK (keparahan IS NULL OR keparahan IN ('ringan','sedang','berat','fatal')),
       foto_mime   TEXT,
       foto_data   BYTEA,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Migrasi untuk instalasi lama (tabel isu_reports sudah ada dari versi
+  // sebelumnya, sebelum kategori "k3" + kolom keparahan/tindakan ada).
+  await pool.query(`ALTER TABLE isu_reports ADD COLUMN IF NOT EXISTS tindakan_perbaikan TEXT;`);
+  await pool.query(`ALTER TABLE isu_reports ADD COLUMN IF NOT EXISTS keparahan TEXT;`);
+  await pool.query(`ALTER TABLE isu_reports DROP CONSTRAINT IF EXISTS isu_reports_kategori_check;`);
+  await pool.query(`ALTER TABLE isu_reports ADD CONSTRAINT isu_reports_kategori_check CHECK (kategori IN ('internal','eksternal','k3'));`);
+  await pool.query(`ALTER TABLE isu_reports DROP CONSTRAINT IF EXISTS isu_reports_keparahan_check;`);
+  await pool.query(`ALTER TABLE isu_reports ADD CONSTRAINT isu_reports_keparahan_check CHECK (keparahan IS NULL OR keparahan IN ('ringan','sedang','berat','fatal'));`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_isu_project ON isu_reports(project_id);`);
 
   // Foto proyek (bisa lebih dari 1, ditampilkan bergeser di Beranda).
@@ -290,15 +301,45 @@ async function initSchema() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_photos_project ON project_photos(project_id);`);
 
-  // Chat internal — siapa saja bisa kirim, hanya Pengelola (akun manapun) yang bisa baca.
+  // Live Chat — pengunjung (tanpa login) bisa mulai sesi obrolan baru, Pengelola
+  // (akun manapun) melihat semua sesi sebagai inbox dan bisa membalas satu-satu.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id               SERIAL PRIMARY KEY,
+      visitor_name     TEXT NOT NULL DEFAULT 'Pengunjung',
+      pengelola_unread BOOLEAN NOT NULL DEFAULT false,
+      visitor_unread   BOOLEAN NOT NULL DEFAULT false,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id          SERIAL PRIMARY KEY,
+      session_id  INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      from_role   TEXT NOT NULL CHECK (from_role IN ('visitor','pengelola','bot')),
       from_name   TEXT NOT NULL,
       message     TEXT NOT NULL,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Migrasi dari versi lama (chat_messages tanpa session_id/from_role) — kalau
+  // kolomnya belum ada, berarti tabel lama; tambahkan kolom baru + 1 sesi
+  // default supaya pesan lama tidak hilang.
+  const chatColCheck = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name='chat_messages' AND column_name='session_id'`);
+  if (!chatColCheck.rows.length) {
+    await pool.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS session_id INTEGER REFERENCES chat_sessions(id) ON DELETE CASCADE;`);
+    await pool.query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS from_role TEXT;`);
+    const { rows: oldRows } = await pool.query(`SELECT COUNT(*)::int AS n FROM chat_messages WHERE session_id IS NULL`);
+    if (oldRows[0].n > 0) {
+      const { rows: seeded } = await pool.query(`INSERT INTO chat_sessions (visitor_name) VALUES ('Pesan Lama') RETURNING id`);
+      await pool.query(`UPDATE chat_messages SET session_id=$1, from_role='visitor' WHERE session_id IS NULL`, [seeded[0].id]);
+    }
+    await pool.query(`ALTER TABLE chat_messages ALTER COLUMN session_id SET NOT NULL;`);
+    await pool.query(`ALTER TABLE chat_messages ALTER COLUMN from_role SET NOT NULL;`);
+    await pool.query(`ALTER TABLE chat_messages DROP CONSTRAINT IF EXISTS chat_messages_from_role_check;`);
+    await pool.query(`ALTER TABLE chat_messages ADD CONSTRAINT chat_messages_from_role_check CHECK (from_role IN ('visitor','pengelola','bot'));`);
+  }
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);`);
 
   // Akun Pengelola — login sungguhan (password di-hash bcrypt), hak akses per role.
   await pool.query(`
@@ -561,11 +602,14 @@ async function seedIfEmpty() {
       }
     }
 
-    // Chat internal contoh
+    // Live Chat contoh — 1 sesi obrolan dari pengunjung contoh
+    const { rows: chatSeed } = await client.query(
+      `INSERT INTO chat_sessions (visitor_name) VALUES ('Tim Lapangan') RETURNING id`
+    );
     await client.query(
-      `INSERT INTO chat_messages (from_name, message, created_at) VALUES
-       ('Tim Lapangan', 'Selamat pagi, mohon info jadwal pengiriman BBM minggu ini.', now() - interval '2 hours'),
-       ('Pengawas Proyek', 'Progress galian batu lunak agak lambat karena cuaca, mohon dimaklumi.', now() - interval '20 hours')`
+      `INSERT INTO chat_messages (session_id, from_role, from_name, message, created_at) VALUES
+       ($1, 'visitor', 'Tim Lapangan', 'Selamat pagi, mohon info jadwal pengiriman BBM minggu ini.', now() - interval '2 hours')`,
+      [chatSeed[0].id]
     );
 
     // Akun Pengelola demo (password di-hash — SEBAIKNYA DIGANTI setelah live).
@@ -609,6 +653,6 @@ async function init() {
 module.exports = {
   pool, init,
   WEATHER_CONDITIONS, EQUIPMENT_STATUS_VALUES, FUEL_TYPES, DOC_FOLDERS,
-  ISU_KATEGORI_VALUES, ISU_STATUS_VALUES, DEFAULT_DOC_FOLDERS,
+  ISU_KATEGORI_VALUES, ISU_STATUS_VALUES, ISU_KEPARAHAN_VALUES, DEFAULT_DOC_FOLDERS,
   ALAT_MASTER_LIST, DT_UNIT_LIST, JABATAN_POOL,
 };

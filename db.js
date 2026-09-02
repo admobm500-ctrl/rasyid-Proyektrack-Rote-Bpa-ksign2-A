@@ -377,6 +377,77 @@ async function initSchema() {
       value TEXT NOT NULL
     );
   `);
+
+  // Master Alat (daftar armada) — dulunya daftar tetap yang ditulis langsung di
+  // kode frontend; sekarang jadi tabel supaya Pemilik/akun Alat bisa menambah
+  // alat baru sendiri dari website. Daftar ini yang jadi sumber pilihan (select)
+  // di form BBM, Ritasi DT, dan tabulasi Alat — begitu alat ditambah di sini,
+  // otomatis muncul di semua dropdown itu tanpa perlu ubah kode lagi.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS equipment_master (
+      id         SERIAL PRIMARY KEY,
+      nama       TEXT NOT NULL,
+      jenis      TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  // Nama alat unik (case-insensitive) supaya tidak ada dua entri "Sany DT-70"
+  // yang cuma beda huruf besar/kecil di dropdown.
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_equipment_master_nama ON equipment_master (lower(nama));`);
+}
+
+/* ---------------------------------------------------------------------
+   Isi Master Alat pertama kali dari daftar armada bawaan. Dipisah dari
+   seedIfEmpty() supaya database lama (yang proyeknya sudah terisi) tetap
+   kebagian daftar armada awal saat update ini dipasang.
+--------------------------------------------------------------------- */
+async function seedEquipmentMasterIfEmpty() {
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS n FROM equipment_master");
+  if (rows[0].n > 0) return;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    let i = 0;
+    for (const a of ALAT_MASTER_LIST) {
+      await client.query(
+        `INSERT INTO equipment_master (nama, jenis, sort_order) VALUES ($1,$2,$3)
+         ON CONFLICT DO NOTHING`,
+        [a.nama, a.jenis, i++]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Menyusulkan alat baru ke database yang SUDAH terisi.
+   seedEquipmentMasterIfEmpty() di atas cuma jalan kalau tabel masih kosong,
+   jadi alat yang ditambahkan ke ALAT_MASTER_LIST setelah server dipakai
+   tidak akan pernah masuk. Fungsi ini menutup celah itu: setiap boot, semua
+   nama di ALAT_MASTER_LIST dicoba di-insert; yang sudah ada dilewati oleh
+   ON CONFLICT DO NOTHING (index unik lower(nama)), jadi aman diulang dan
+   tidak pernah membuat entri dobel. Alat baru dapat sort_order paling akhir
+   supaya urutan daftar armada yang lama tidak berubah.
+--------------------------------------------------------------------- */
+async function syncEquipmentMasterAdditions() {
+  const { rows } = await pool.query(
+    "SELECT COALESCE(MAX(sort_order), -1)::int AS max FROM equipment_master"
+  );
+  let i = rows[0].max + 1;
+  for (const a of ALAT_MASTER_LIST) {
+    const r = await pool.query(
+      `INSERT INTO equipment_master (nama, jenis, sort_order)
+       VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`,
+      [a.nama, a.jenis, i]
+    );
+    if (r.rowCount) i++;
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -670,6 +741,8 @@ async function seedIfEmpty() {
 async function init() {
   await initSchema();
   await seedIfEmpty();
+  await seedEquipmentMasterIfEmpty();
+  await syncEquipmentMasterAdditions();
 }
 
 module.exports = {

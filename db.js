@@ -377,96 +377,14 @@ async function initSchema() {
       value TEXT NOT NULL
     );
   `);
-
-  // Master Alat (daftar armada) — dulunya daftar tetap yang ditulis langsung di
-  // kode frontend; sekarang jadi tabel supaya Pemilik/akun Alat bisa menambah
-  // alat baru sendiri dari website. Daftar ini yang jadi sumber pilihan (select)
-  // di form BBM, Ritasi DT, dan tabulasi Alat — begitu alat ditambah di sini,
-  // otomatis muncul di semua dropdown itu tanpa perlu ubah kode lagi.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS equipment_master (
-      id         SERIAL PRIMARY KEY,
-      nama       TEXT NOT NULL,
-      jenis      TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-  `);
-  // Nama alat unik (case-insensitive) supaya tidak ada dua entri "Sany DT-70"
-  // yang cuma beda huruf besar/kecil di dropdown.
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_equipment_master_nama ON equipment_master (lower(nama));`);
 }
 
 /* ---------------------------------------------------------------------
-   Isi Master Alat pertama kali dari daftar armada bawaan. Dipisah dari
-   seedIfEmpty() supaya database lama (yang proyeknya sudah terisi) tetap
-   kebagian daftar armada awal saat update ini dipasang.
+   Seed data awal (HANYA data induk, dan hanya kalau tabel masih kosong):
+   1 proyek (Proyek Pulau Rote K-SIGN Tahap 2 NK-BPA), item BOQ dari dokumen
+   kontrak, daftar unit alat/armada, & daftar jabatan personil.
+   TIDAK ADA data contoh/dummy untuk laporan harian.
 --------------------------------------------------------------------- */
-async function seedEquipmentMasterIfEmpty() {
-  const { rows } = await pool.query("SELECT COUNT(*)::int AS n FROM equipment_master");
-  if (rows[0].n > 0) return;
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    let i = 0;
-    for (const a of ALAT_MASTER_LIST) {
-      await client.query(
-        `INSERT INTO equipment_master (nama, jenis, sort_order) VALUES ($1,$2,$3)
-         ON CONFLICT DO NOTHING`,
-        [a.nama, a.jenis, i++]
-      );
-    }
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-/* ---------------------------------------------------------------------
-   Menyusulkan alat baru ke database yang SUDAH terisi.
-   seedEquipmentMasterIfEmpty() di atas cuma jalan kalau tabel masih kosong,
-   jadi alat yang ditambahkan ke ALAT_MASTER_LIST setelah server dipakai
-   tidak akan pernah masuk. Fungsi ini menutup celah itu: setiap boot, semua
-   nama di ALAT_MASTER_LIST dicoba di-insert; yang sudah ada dilewati oleh
-   ON CONFLICT DO NOTHING (index unik lower(nama)), jadi aman diulang dan
-   tidak pernah membuat entri dobel. Alat baru dapat sort_order paling akhir
-   supaya urutan daftar armada yang lama tidak berubah.
---------------------------------------------------------------------- */
-async function syncEquipmentMasterAdditions() {
-  const { rows } = await pool.query(
-    "SELECT COALESCE(MAX(sort_order), -1)::int AS max FROM equipment_master"
-  );
-  let i = rows[0].max + 1;
-  for (const a of ALAT_MASTER_LIST) {
-    const r = await pool.query(
-      `INSERT INTO equipment_master (nama, jenis, sort_order)
-       VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id`,
-      [a.nama, a.jenis, i]
-    );
-    if (r.rowCount) i++;
-  }
-}
-
-/* ---------------------------------------------------------------------
-   Seed data awal (hanya kalau tabel masih kosong) — sama seperti versi
-   preview: 1 proyek (Proyek Pulau Rote K-SIGN Tahap 2 NK-BPA), item BOQ
-   dari dokumen kontrak, daftar 48 alat/armada, & 20 jabatan personil.
---------------------------------------------------------------------- */
-function mulberry32(seed) {
-  return function () {
-    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const rng = mulberry32(20260813);
-const rand = (min, max) => min + rng() * (max - min);
-const randInt = (min, max) => Math.round(rand(min, max));
-const pick = (arr) => arr[Math.floor(rng() * arr.length)];
 
 const PROJECTS = [{ id: "p1", name: "Proyek Pulau Rote K-SIGN Tahap 2 NK-BPA" }];
 
@@ -519,15 +437,13 @@ const ALAT_MASTER_LIST = [
   { nama: "MESIN KOMPRESOR PISPOT", jenis: "Lainnya" },
   { nama: "Dutro MH DT-58", jenis: "Dump Truck" },
   { nama: "Dutro MH DT-59", jenis: "Dump Truck" },
-  { nama: "MTX 6800 S G-90", jenis: "Lainnya" },
-  { nama: "MTX 6800 S G-91", jenis: "Lainnya" },
-  { nama: "MTX 6800 S G-92", jenis: "Lainnya" },
-  { nama: "MTX 6800 S G-93", jenis: "Lainnya" },
-  { nama: "MTX 6800 S G-94", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-90", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-91", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-92", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-93", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-94", jenis: "Lainnya" },
 ];
 const DT_UNIT_LIST = ALAT_MASTER_LIST.filter((a) => a.jenis === "Dump Truck").map((a) => a.nama);
-const FUEL_EQUIPMENT = ALAT_MASTER_LIST.map((a) => a.nama);
-const FUEL_SOURCES = ["Pengiriman SPBU Industri Rote", "Pengiriman Depo BBM Pusat", "Tangki Mobile Supplier PT Sumber Energi"];
 
 const JABATAN_POOL = [
   { jabatan: "Project Manager", jumlah: 1 }, { jabatan: "Site Manager", jumlah: 1 },
@@ -551,19 +467,18 @@ const KONTRAK_SEED_ITEMS = [
   { no: 6, uraian: "Mobilisasi dan Demobilisasi", satuan: "Ls", volumeKontrak: 1.00, bobotPersen: 23.183111 },
 ];
 
-const ZONA = ["STA 0+000 - 0+500", "STA 0+500 - 1+000", "STA 1+000 - 1+500", "Blok A", "Blok B", "Blok C", "Zona Utara", "Zona Selatan"];
-const PRODUCTION_NOTES = ["Cuaca mendukung, produksi lancar", "Tertunda karena hujan siang hari", "Alat utama sempat maintenance ringan", "Akses jalan kerja licin, produksi melambat", "", "", "", ""];
-const EQUIPMENT_POOL = ["Excavator PC200", "Excavator PC300", "Bulldozer D65", "Bulldozer D85", "Dump Truck 10 unit", "Vibro Roller", "Motor Grader", "Chainsaw crew 8 orang"];
-const EQUIPMENT_TYPE_OPTIONS = ["Excavator", "Bulldozer", "Dump Truck", "Vibro Roller", "Motor Grader", "Compactor", "Crane", "Chainsaw/Alat Land Clearing"];
-const WEATHER_NOTES = ["Hujan turun sore hari", "Mendung sepanjang hari, tidak ada hujan", "Cuaca cerah penuh", "Hujan deras menghentikan pekerjaan galian", ""];
 
-const TODAY = new Date();
-function iso(d) { return d.toISOString().slice(0, 10); }
 
 async function seedIfEmpty() {
   const { rows } = await pool.query("SELECT COUNT(*)::int AS n FROM projects");
   if (rows[0].n > 0) return;
 
+  // CATATAN PENTING:
+  // Seed di bawah HANYA mengisi data induk (master) yang memang nyata:
+  // proyek, item kontrak/BOQ, daftar unit alat, dan daftar jabatan personil.
+  // Data transaksi harian (Produksi, Ritasi DT, BBM, Cuaca, Dokumen, Chat)
+  // SENGAJA TIDAK diisi apa-apa — semuanya mulai KOSONG dan hanya terisi dari
+  // input asli di website.
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -571,141 +486,33 @@ async function seedIfEmpty() {
     for (const p of PROJECTS) {
       await client.query("INSERT INTO projects (id, name) VALUES ($1,$2) ON CONFLICT (id) DO NOTHING", [p.id, p.name]);
 
-      // Kontrak (BOQ)
-      const kontrakIds = [];
+      // Kontrak (BOQ) — dari dokumen kontrak asli.
       for (const item of KONTRAK_SEED_ITEMS) {
-        const { rows: r } = await client.query(
+        await client.query(
           `INSERT INTO kontrak_items (project_id, no, uraian, satuan, volume_kontrak, bobot_persen, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,'') RETURNING id`,
+           VALUES ($1,$2,$3,$4,$5,$6,'')`,
           [p.id, item.no, item.uraian, item.satuan, item.volumeKontrak, item.bobotPersen]
         );
-        kontrakIds.push({ id: r[0].id, ...item });
-      }
-      const dailyItems = kontrakIds.filter((k) => k.satuan.toLowerCase() !== "ls");
-      const days = 21;
-
-      // Produksi Harian (21 hari terakhir)
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(TODAY); d.setDate(d.getDate() - i);
-        const activeCount = rng() < 0.5 ? 1 : 2;
-        for (let c = 0; c < activeCount; c++) {
-          const item = pick(dailyItems);
-          const dailyVolume = Math.round(rand(0.001, 0.01) * item.volumeKontrak * 10) / 10;
-          const typeCount = rng() < 0.5 ? 1 : 2;
-          const equipmentTypes = [];
-          for (let t = 0; t < typeCount; t++) { const et = pick(EQUIPMENT_TYPE_OPTIONS); if (!equipmentTypes.includes(et)) equipmentTypes.push(et); }
-          await client.query(
-            `INSERT INTO production_reports (project_id, kontrak_item_id, date, volume, unit, zona, equipment_types, equipment, notes)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [p.id, item.id, iso(d), dailyVolume, item.satuan, pick(ZONA), JSON.stringify(equipmentTypes), pick(EQUIPMENT_POOL), pick(PRODUCTION_NOTES)]
-          );
-        }
-      }
-      // Item lump-sum sekali di awal proyek
-      for (const item of kontrakIds.filter((k) => k.satuan.toLowerCase() === "ls")) {
-        const d = new Date(TODAY); d.setDate(d.getDate() - (days - 1));
-        await client.query(
-          `INSERT INTO production_reports (project_id, kontrak_item_id, date, volume, unit, zona, equipment_types, equipment, notes)
-           VALUES ($1,$2,$3,$4,$5,'',  '[]', '', $6)`,
-          [p.id, item.id, iso(d), item.volumeKontrak, item.satuan, "Mobilisasi alat & personel awal proyek"]
-        );
       }
 
-      // Ritasi DT (21 hari terakhir)
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(TODAY); d.setDate(d.getDate() - i);
-        const tripsToday = randInt(2, 5);
-        for (let j = 0; j < tripsToday; j++) {
-          const capacity = pick([5, 6, 8, 10]);
-          const itemRef = rng() < 0.7 ? pick(dailyItems).id : null;
-          await client.query(
-            `INSERT INTO ritasi_dt (project_id, date, unit, kontrak_item_id, count, capacity, notes)
-             VALUES ($1,$2,$3,$4,$5,$6,'')`,
-            [p.id, iso(d), pick(DT_UNIT_LIST), itemRef, randInt(4, 18), capacity]
-          );
-        }
-      }
-
-      // BBM (21 hari terakhir)
-      let sinceDelivery = 0;
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(TODAY); d.setDate(d.getDate() - i);
-        if (sinceDelivery === 0) {
-          await client.query(
-            `INSERT INTO fuel_logs (project_id, date, type, equipment, liters, notes) VALUES ($1,$2,'masuk',$3,$4,'')`,
-            [p.id, iso(d), pick(FUEL_SOURCES), Math.round(rand(1500, 2600))]
-          );
-        }
-        const entries = randInt(2, 4);
-        for (let j = 0; j < entries; j++) {
-          await client.query(
-            `INSERT INTO fuel_logs (project_id, date, type, equipment, liters, notes) VALUES ($1,$2,'keluar',$3,$4,'')`,
-            [p.id, iso(d), pick(FUEL_EQUIPMENT), Math.round(rand(35, 220))]
-          );
-        }
-        sinceDelivery = (sinceDelivery + 1) % 5;
-      }
-
-      // Alat — tabulasi status, satu baris per unit ALAT_MASTER_LIST
+      // Alat — satu baris per unit, semua mulai berstatus "Ready" tanpa catatan.
       for (const a of ALAT_MASTER_LIST) {
-        const roll = rng();
-        const status = roll < 0.78 ? "Ready" : roll < 0.93 ? "Perbaikan" : "Standby";
-        const notes = status === "Perbaikan" ? "Dalam perbaikan/maintenance di workshop" : status === "Standby" ? "Standby, belum dioperasikan" : "";
         await client.query(
-          `INSERT INTO equipment_status (project_id, nama, jenis, status, notes) VALUES ($1,$2,$3,$4,$5)`,
-          [p.id, a.nama, a.jenis, status, notes]
+          `INSERT INTO equipment_status (project_id, nama, jenis, status, notes) VALUES ($1,$2,$3,'Ready','')`,
+          [p.id, a.nama, a.jenis]
         );
       }
 
-      // Manpower — tabulasi jumlah orang per jabatan
+      // Manpower — daftar jabatan, jumlah orang diisi sendiri lewat website.
       for (const j of JABATAN_POOL) {
         await client.query(
           `INSERT INTO manpower_roster (project_id, jabatan, jumlah_orang, notes) VALUES ($1,$2,$3,'')`,
           [p.id, j.jabatan, j.jumlah]
         );
       }
-
-      // Cuaca (21 hari terakhir)
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(TODAY); d.setDate(d.getDate() - i);
-        const condition = pick(WEATHER_CONDITIONS);
-        const isRain = condition === "hujan_ringan" || condition === "hujan_lebat";
-        await client.query(
-          `INSERT INTO weather_logs (project_id, date, condition, rainfall_mm, hours_lost, notes) VALUES ($1,$2,$3,$4,$5,$6)`,
-          [p.id, iso(d), condition, isRain ? Math.round(rand(2, 60) * 10) / 10 : 0, isRain ? Math.round(rand(0.5, condition === "hujan_lebat" ? 6 : 2) * 10) / 10 : 0, pick(WEATHER_NOTES)]
-        );
-      }
-
-      // Dokumen contoh (isi file cuma teks placeholder, bukan file asli)
-      const DOC_SAMPLES = {
-        tagihan: [{ filename: "Invoice-Sewa-Alat-Agustus.pdf", filetype: "pdf", description: "Tagihan sewa alat berat bulan Agustus" }],
-        dwg: [{ filename: "Layout-CutFill-ZonaA-Rev2.dwg", filetype: "dwg", description: "Gambar kerja cut & fill zona A rev.2" }],
-        baop: [{ filename: "BAOP-Galian-Minggu3.pdf", filetype: "pdf", description: "Berita acara opname pekerjaan galian minggu ke-3" }],
-        geopdf: [{ filename: "Peta-Progress-Area-Kerja.pdf", filetype: "pdf", description: "GeoPDF peta progress area kerja" }],
-      };
-      for (const folder of DOC_FOLDERS) {
-        for (const s of DOC_SAMPLES[folder]) {
-          const buf = Buffer.from("Contoh dokumen awal — " + s.filename);
-          await client.query(
-            `INSERT INTO documents (project_id, folder, filename, filetype, filesize, description, file_data)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [p.id, folder, s.filename, s.filetype, buf.length, s.description, buf]
-          );
-        }
-      }
     }
 
-    // Live Chat contoh — 1 sesi obrolan dari pengunjung contoh
-    const { rows: chatSeed } = await client.query(
-      `INSERT INTO chat_sessions (visitor_name) VALUES ('Tim Lapangan') RETURNING id`
-    );
-    await client.query(
-      `INSERT INTO chat_messages (session_id, from_role, from_name, message, created_at) VALUES
-       ($1, 'visitor', 'Tim Lapangan', 'Selamat pagi, mohon info jadwal pengiriman BBM minggu ini.', now() - interval '2 hours')`,
-      [chatSeed[0].id]
-    );
-
-    // Akun Pengelola demo (password di-hash — SEBAIKNYA DIGANTI setelah live).
+    // Akun Pengelola awal (password di-hash — SEBAIKNYA DIGANTI setelah live).
     const demoAccounts = [
       { username: "pemilik", password: "pemilik123", role: "owner", label: "Pemilik (Akses Semua Menu)" },
       { username: "bbm", password: "bbm123", role: "bbm", label: "Pengelola BBM" },
@@ -729,7 +536,7 @@ async function seedIfEmpty() {
     );
 
     await client.query("COMMIT");
-    console.log("Seeded demo data:", PROJECTS.length, "proyek, akun pengelola demo, & password dokumen awal.");
+    console.log("Seed awal selesai:", PROJECTS.length, "proyek + item kontrak, daftar alat, daftar jabatan, akun pengelola. Data laporan harian dibiarkan KOSONG.");
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -738,11 +545,143 @@ async function seedIfEmpty() {
   }
 }
 
+/* ---------------------------------------------------------------------
+   Pembersihan sekali-jalan untuk database yang SUDAH terlanjur terisi data
+   contoh dari versi sebelumnya. Dijalankan otomatis saat server start, lalu
+   ditandai di site_settings supaya tidak pernah diulang.
+
+   Yang dihapus HANYA baris yang jelas-jelas bawaan seed lama (nama file &
+   isi pesan persis sama dengan contoh di kode). Data yang diinput sendiri
+   lewat website TIDAK tersentuh.
+--------------------------------------------------------------------- */
+const SEED_SAMPLE_DOCS = [
+  "Invoice-Sewa-Alat-Agustus.pdf",
+  "Layout-CutFill-ZonaA-Rev2.dwg",
+  "BAOP-Galian-Minggu3.pdf",
+  "Peta-Progress-Area-Kerja.pdf",
+];
+
+async function cleanupOldDemoData() {
+  const { rows: done } = await pool.query(
+    "SELECT 1 FROM site_settings WHERE key = 'demo_cleanup_v1' LIMIT 1"
+  );
+  if (done.length) return;
+
+  // 1. Dokumen contoh — isi file-nya diawali teks "Contoh dokumen awal — ".
+  const doc = await pool.query(
+    `DELETE FROM documents
+      WHERE filename = ANY($1::text[])
+        AND encode(substring(file_data from 1 for 21), 'escape') LIKE 'Contoh dokumen awal%'`,
+    [SEED_SAMPLE_DOCS]
+  );
+
+  // 2. Sesi chat contoh "Tim Lapangan" beserta pesannya.
+  const chat = await pool.query(
+    `DELETE FROM chat_sessions cs
+      WHERE cs.visitor_name = 'Tim Lapangan'
+        AND NOT EXISTS (
+          SELECT 1 FROM chat_messages m
+           WHERE m.session_id = cs.id
+             AND m.message <> 'Selamat pagi, mohon info jadwal pengiriman BBM minggu ini.'
+        )`
+  );
+
+  // 3. Item Kontrak/BOQ kembar — di database live item yang sama sempat masuk
+  //    3x sehingga total bobot jadi ~300% (seharusnya ~100%) dan Realisasi
+  //    Progres ikut salah. Sisakan satu baris (id terkecil) per item yang
+  //    BENAR-BENAR identik (no, uraian, satuan, volume, bobot sama persis);
+  //    item yang nilainya berbeda tidak disentuh.
+  await pool.query(`
+    WITH keep AS (
+      SELECT MIN(id) AS keep_id, project_id, no, uraian, satuan, volume_kontrak, bobot_persen
+        FROM kontrak_items
+       GROUP BY project_id, no, uraian, satuan, volume_kontrak, bobot_persen
+      HAVING COUNT(*) > 1
+    ), remap AS (
+      SELECT k.id AS dup_id, keep.keep_id
+        FROM kontrak_items k
+        JOIN keep ON keep.project_id = k.project_id AND keep.no = k.no
+                 AND keep.uraian = k.uraian AND keep.satuan = k.satuan
+                 AND keep.volume_kontrak = k.volume_kontrak
+                 AND keep.bobot_persen IS NOT DISTINCT FROM k.bobot_persen
+       WHERE k.id <> keep.keep_id
+    )
+    UPDATE production_reports pr SET kontrak_item_id = remap.keep_id
+      FROM remap WHERE pr.kontrak_item_id = remap.dup_id
+  `);
+  await pool.query(`
+    WITH keep AS (
+      SELECT MIN(id) AS keep_id, project_id, no, uraian, satuan, volume_kontrak, bobot_persen
+        FROM kontrak_items
+       GROUP BY project_id, no, uraian, satuan, volume_kontrak, bobot_persen
+      HAVING COUNT(*) > 1
+    ), remap AS (
+      SELECT k.id AS dup_id, keep.keep_id
+        FROM kontrak_items k
+        JOIN keep ON keep.project_id = k.project_id AND keep.no = k.no
+                 AND keep.uraian = k.uraian AND keep.satuan = k.satuan
+                 AND keep.volume_kontrak = k.volume_kontrak
+                 AND keep.bobot_persen IS NOT DISTINCT FROM k.bobot_persen
+       WHERE k.id <> keep.keep_id
+    )
+    UPDATE ritasi_dt r SET kontrak_item_id = remap.keep_id
+      FROM remap WHERE r.kontrak_item_id = remap.dup_id
+  `);
+  const boq = await pool.query(`
+    DELETE FROM kontrak_items k
+     WHERE k.id > (
+       SELECT MIN(k2.id) FROM kontrak_items k2
+        WHERE k2.project_id = k.project_id AND k2.no = k.no AND k2.uraian = k.uraian
+          AND k2.satuan = k.satuan AND k2.volume_kontrak = k.volume_kontrak
+          AND k2.bobot_persen IS NOT DISTINCT FROM k.bobot_persen
+     )
+  `);
+
+  await pool.query(
+    "INSERT INTO site_settings (key, value) VALUES ('demo_cleanup_v1', 'done') ON CONFLICT (key) DO NOTHING"
+  );
+  console.log(
+    `Pembersihan data contoh lama: ${doc.rowCount} dokumen, ${chat.rowCount} sesi chat, ${boq.rowCount} item kontrak kembar dihapus.`
+  );
+}
+
+/* ---------------------------------------------------------------------
+   Unit alat yang ditambahkan setelah database live — dimasukkan ke tabel
+   alat kalau namanya belum ada. Aman dijalankan berulang kali, dan tidak
+   menyentuh unit lain (termasuk unit yang sudah sengaja dihapus dari web).
+--------------------------------------------------------------------- */
+const ALAT_TAMBAHAN = [
+  { nama: "MTX 6800S 5KVA G-90", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-91", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-92", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-93", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-94", jenis: "Lainnya" },
+];
+
+async function ensureAlatTambahan() {
+  const { rows: projects } = await pool.query("SELECT id FROM projects");
+  let added = 0;
+  for (const p of projects) {
+    for (const a of ALAT_TAMBAHAN) {
+      const r = await pool.query(
+        `INSERT INTO equipment_status (project_id, nama, jenis, status, notes)
+         SELECT $1, $2, $3, 'Ready', ''
+          WHERE NOT EXISTS (
+            SELECT 1 FROM equipment_status WHERE project_id = $1 AND nama = $2
+          )`,
+        [p.id, a.nama, a.jenis]
+      );
+      added += r.rowCount;
+    }
+  }
+  if (added) console.log(`Alat baru ditambahkan ke tabulasi alat: ${added} unit.`);
+}
+
 async function init() {
   await initSchema();
   await seedIfEmpty();
-  await seedEquipmentMasterIfEmpty();
-  await syncEquipmentMasterAdditions();
+  await cleanupOldDemoData();
+  await ensureAlatTambahan();
 }
 
 module.exports = {

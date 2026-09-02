@@ -109,6 +109,11 @@ const ALAT_MASTER_LIST = [
   { nama: "MESIN KOMPRESOR PISPOT", jenis: "Lainnya" },
   { nama: "Dutro MH DT-58", jenis: "Dump Truck" },
   { nama: "Dutro MH DT-59", jenis: "Dump Truck" },
+  { nama: "MTX 6800S 5KVA G-90", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-91", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-92", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-93", jenis: "Lainnya" },
+  { nama: "MTX 6800S 5KVA G-94", jenis: "Lainnya" },
 ];
 const DT_UNIT_LIST = ALAT_MASTER_LIST.filter((a) => a.jenis === "Dump Truck").map((a) => a.nama);
 
@@ -232,15 +237,15 @@ function fillProjectSelects() {
   const selects = ["#projectSelect", "#produksiProjectFilter", "#ritasiProjectFilter", "#bbmProjectFilter", "#alatProjectFilter", "#manpowerProjectFilter", "#cuacaProjectFilter", "#dokumenProjectFilter", "#kontrakProjectFilter", "#isuProjectFilter",
     "#p-project", "#r-project", "#f-project", "#a-project", "#m-project", "#w-project", "#d-project", "#k-project", "#isu-project"];
   selects.forEach((sel) => { $(sel).innerHTML = ""; });
-  ["#produksiProjectFilter", "#ritasiProjectFilter", "#bbmProjectFilter", "#alatProjectFilter", "#manpowerProjectFilter", "#cuacaProjectFilter", "#dokumenProjectFilter", "#isuProjectFilter"].forEach((sel) => {
-    $(sel).add(new Option("Semua Proyek", "all"));
-  });
+  // Opsi "Semua Proyek" dihilangkan — filter proyek di semua tab langsung
+  // memakai proyek yang sedang aktif.
   PROJECTS.forEach((p) => { selects.forEach((sel) => $(sel).add(new Option(p.name, p.id))); });
   if (state.projectId) {
     $("#projectSelect").value = state.projectId;
     ["#p-project", "#r-project", "#f-project", "#a-project", "#m-project", "#w-project", "#d-project", "#k-project", "#isu-project", "#kontrakProjectFilter"].forEach((sel) => ($(sel).value = state.projectId));
   }
-  ["#produksiProjectFilter", "#ritasiProjectFilter", "#bbmProjectFilter", "#alatProjectFilter", "#manpowerProjectFilter", "#cuacaProjectFilter", "#dokumenProjectFilter", "#isuProjectFilter"].forEach((sel) => ($(sel).value = "all"));
+  const defaultProjectId = state.projectId || (PROJECTS[0] ? PROJECTS[0].id : "");
+  ["#produksiProjectFilter", "#ritasiProjectFilter", "#bbmProjectFilter", "#alatProjectFilter", "#manpowerProjectFilter", "#cuacaProjectFilter", "#dokumenProjectFilter", "#isuProjectFilter"].forEach((sel) => ($(sel).value = defaultProjectId));
   $("#jabatanOptions").innerHTML = JABATAN_POOL.map((j) => `<option value="${escapeHtml(j.jabatan)}"></option>`).join("");
   $("#r-unit").innerHTML = DT_UNIT_LIST.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
   populateFuelEquipmentOptions(false);
@@ -312,6 +317,8 @@ els.openAddBtn.addEventListener("click", () => {
 els.projectSelect.addEventListener("change", () => {
   state.projectId = els.projectSelect.value;
   ["#f-project", "#r-project", "#a-project", "#m-project", "#w-project", "#d-project", "#isu-project"].forEach((sel) => ($(sel).value = state.projectId));
+  // Filter proyek di tiap tab ikut proyek aktif (opsi "Semua Proyek" sudah dihapus).
+  ["#produksiProjectFilter", "#ritasiProjectFilter", "#bbmProjectFilter", "#alatProjectFilter", "#manpowerProjectFilter", "#cuacaProjectFilter", "#dokumenProjectFilter", "#isuProjectFilter", "#kontrakProjectFilter"].forEach((sel) => { const el = $(sel); if (el) el.value = state.projectId; });
   refreshAll();
 });
 

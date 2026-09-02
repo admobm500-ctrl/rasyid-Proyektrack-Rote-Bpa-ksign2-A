@@ -448,6 +448,11 @@ const ALAT_MASTER_LIST = [
   { nama: "MESIN KOMPRESOR PISPOT", jenis: "Lainnya" },
   { nama: "Dutro MH DT-58", jenis: "Dump Truck" },
   { nama: "Dutro MH DT-59", jenis: "Dump Truck" },
+  { nama: "MTX 6800 S G-90", jenis: "Lainnya" },
+  { nama: "MTX 6800 S G-91", jenis: "Lainnya" },
+  { nama: "MTX 6800 S G-92", jenis: "Lainnya" },
+  { nama: "MTX 6800 S G-93", jenis: "Lainnya" },
+  { nama: "MTX 6800 S G-94", jenis: "Lainnya" },
 ];
 const DT_UNIT_LIST = ALAT_MASTER_LIST.filter((a) => a.jenis === "Dump Truck").map((a) => a.nama);
 const FUEL_EQUIPMENT = ALAT_MASTER_LIST.map((a) => a.nama);

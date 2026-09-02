@@ -531,6 +531,126 @@ function renderKpis() {
   const ritasiVolume = todayRitasi.reduce((s, r) => s + r.count * r.capacity, 0);
   $("#kpiRitasi").textContent = fmtNum(ritasiCount) + " rit";
   $("#kpiRitasiSub").textContent = ritasiCount ? fmtNum(ritasiVolume) + " M3 hari ini" : "Belum ada data hari ini";
+
+  renderGalianSolar();
+}
+
+/* ---------------------------------------------------------------------
+   Rasio Galian vs Pemakaian Solar (beranda)
+
+   "Galian" tidak disimpan sebagai kategori tersendiri di database — jenis
+   pekerjaan di Produksi Harian selalu mengacu ke item BOQ/kontrak. Jadi item
+   yang dianggap galian dikenali otomatis dari uraiannya: semua item yang
+   mengandung kata "galian" ikut digabung (mis. "Penggalian tanah biasa dan
+   pengangkutan…" dan "Galian batu lunak"), tanpa peduli jenis galiannya apa.
+
+   Solar = total BBM Keluar (pemakaian alat) kumulatif dari awal sampai saat
+   ini. BBM Masuk & Saldo Awal sengaja tidak dipakai — yang dibandingkan
+   adalah solar yang benar-benar terpakai.
+
+   Ritasi DT sengaja TIDAK ikut dijumlahkan, sama seperti perhitungan progress
+   kontrak, supaya volume tidak dobel hitung.
+--------------------------------------------------------------------- */
+const GALIAN_URAIAN_RE = /galian/i;
+
+function isGalianItem(item) {
+  return !!item && GALIAN_URAIAN_RE.test(item.uraian || "");
+}
+
+function galianSolarStats(projectId) {
+  const items = kontrak
+    .filter((k) => k.projectId === projectId && isGalianItem(k))
+    .slice()
+    .sort((a, b) => a.no - b.no);
+  const ids = new Set(items.map((k) => k.id));
+
+  const perItem = {};
+  items.forEach((k) => { perItem[k.id] = 0; });
+
+  let galian = 0;
+  production.forEach((r) => {
+    if (r.projectId !== projectId || !ids.has(r.kontrakItemId)) return;
+    galian += r.volume;
+    perItem[r.kontrakItemId] += r.volume;
+  });
+
+  const solar = fuel
+    .filter((r) => r.projectId === projectId && r.type === "keluar")
+    .reduce((s, r) => s + r.liters, 0);
+
+  // Satuan: pakai satuan item galian kalau semuanya sama (biasanya M3).
+  const satuanSet = [...new Set(items.map((k) => (k.satuan || "").trim()).filter(Boolean))];
+  const unit = satuanSet.length === 1 ? satuanSet[0] : "M3";
+
+  return {
+    items, perItem, unit, galian, solar,
+    volPerLiter: solar > 0 ? galian / solar : null,
+    literPerVol: galian > 0 ? solar / galian : null,
+  };
+}
+
+function renderGalianSolar() {
+  const s = galianSolarStats(state.projectId);
+  const u = s.unit;
+  const hasGalian = s.galian > 0;
+  const hasSolar = s.solar > 0;
+
+  // --- Tile KPI ---
+  if (hasGalian && hasSolar) {
+    $("#kpiGalianSolar").textContent = fmtNum2(s.volPerLiter) + " " + u + "/L";
+    $("#kpiGalianSolarSub").textContent =
+      "Galian " + fmtNum(s.galian) + " " + u + " · Solar " + fmtNum(s.solar) + " L";
+  } else {
+    $("#kpiGalianSolar").textContent = "–";
+    $("#kpiGalianSolarSub").textContent = !s.items.length
+      ? "Belum ada item galian di kontrak"
+      : (!hasGalian ? "Belum ada produksi galian" : "Belum ada pemakaian solar");
+  }
+
+  // --- Kartu perbandingan ---
+  $("#gsGalianValue").innerHTML = s.items.length
+    ? fmtNum(s.galian) + '<span class="unit">' + escapeHtml(u) + "</span>"
+    : "–";
+  $("#gsGalianSub").textContent = !s.items.length
+    ? 'Tidak ada item kontrak yang uraiannya mengandung kata "galian"'
+    : (hasGalian
+        ? "Kumulatif dari " + s.items.length + " item galian di Produksi Harian"
+        : "Belum ada volume galian di Produksi Harian (" + s.items.length + " item galian terdaftar)");
+
+  $("#gsSolarValue").innerHTML = fmtNum(s.solar) + '<span class="unit">Liter</span>';
+  $("#gsSolarSub").textContent = hasSolar
+    ? "Kumulatif BBM Keluar (pemakaian alat) s.d saat ini"
+    : "Belum ada catatan BBM keluar di menu BBM";
+
+  if (hasGalian && hasSolar) {
+    $("#gsRatioMain").textContent =
+      "Total Galian : Total Solar = " + fmtNum2(s.volPerLiter) + " " + u + " : 1 Liter";
+    $("#gsRatioAlt").textContent =
+      "Artinya tiap 1 Liter solar menghasilkan ± " + fmtNum2(s.volPerLiter) + " " + u +
+      " galian · atau tiap 1 " + u + " galian butuh ± " + fmtNum2(s.literPerVol) + " Liter solar.";
+  } else {
+    $("#gsRatioMain").textContent = "–";
+    $("#gsRatioAlt").textContent =
+      "Rasio baru muncul setelah ada volume galian di Produksi Harian dan catatan BBM keluar di menu BBM.";
+  }
+
+  // --- Rincian item galian yang ikut dihitung ---
+  $("#gsItemChips").innerHTML = s.items.length
+    ? s.items.map((k) => {
+        const vol = s.perItem[k.id] || 0;
+        const share = s.galian > 0 ? (vol / s.galian) * 100 : 0;
+        const color = itemColor(k);
+        return '<span class="ratio-chip" style="border-color:' + hexToRgba(color, 0.55) + ';">' +
+          '<span class="dot" style="display:inline-block; width:7px; height:7px; border-radius:50%; background:' + color + '; margin-right:6px;"></span>' +
+          escapeHtml(k.uraian) + ' — <b>' + fmtNum(vol) + " " + escapeHtml(k.satuan || u) + "</b>" +
+          (s.galian > 0 ? " (" + fmtNum2(share) + "%)" : "") +
+          "</span>";
+      }).join("")
+    : "";
+
+  $("#gsNote").textContent = s.items.length
+    ? 'Item galian dikenali otomatis dari uraian item kontrak yang mengandung kata "galian" — semua jenis galian digabung jadi satu total. Volume diambil dari Produksi Harian (Ritasi DT tidak ikut dijumlahkan supaya tidak dobel hitung). Solar diambil dari total BBM Keluar; BBM Masuk dan Saldo Awal tidak dihitung karena yang dibandingkan adalah solar yang benar-benar terpakai.'
+    : 'Belum ada item di menu Kontrak yang uraiannya mengandung kata "galian". Tambahkan/ubah item BOQ (mis. "Galian batu lunak" atau "Penggalian tanah biasa") supaya rasio ini bisa dihitung otomatis.';
 }
 
 function renderProductionChart() {
@@ -1527,6 +1647,7 @@ function renderIsuList() {
 }
 
 $("#isuAlertGotoBtn").addEventListener("click", () => setView("isu"));
+$("#gsGotoBbmBtn").addEventListener("click", () => setView("bbm"));
 
 function renderBerandaIsuAlert() {
   const rows = isu.filter((r) => r.projectId === state.projectId && r.status === "berjalan").sort((a, b) => b.date.localeCompare(a.date));

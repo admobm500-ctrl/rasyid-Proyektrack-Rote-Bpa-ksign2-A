@@ -2,7 +2,7 @@
 // kontrak/BOQ progress, Ritasi DT, BBM per-alat, Alat & Manpower tabulation,
 // dokumen berpassword, foto proyek, chat internal, & login Pengelola berperan).
 // Uses PostgreSQL (works with any Postgres host, incl. the free Neon tier)
-// via a DATABASE_URL connection string in the environment.
+// via a DATABASE_URL connection string in the environment. 
 
 require("dotenv").config();
 const { Pool } = require("pg");

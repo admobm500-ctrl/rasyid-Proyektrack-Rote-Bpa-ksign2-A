@@ -695,6 +695,28 @@
         <thead><tr><th>Nama Alat</th><th>Jenis</th><th>Status</th><th>Catatan</th><th></th></tr></thead>
         <tbody id="alatTbody"></tbody>
       </table>
+
+      <div class="card" style="margin-top:22px;">
+        <div class="card-head">
+          <h2>Daftar Armada (Master Alat)</h2>
+          <button class="btn ghost write-action" id="alatMasterAddBtn" type="button" style="padding:6px 12px; font-size:12px;">+ Tambah Alat ke Daftar</button>
+        </div>
+        <div class="contract-note" style="margin-top:0; margin-bottom:12px;">Daftar induk semua alat/armada proyek. Alat yang ditambah di sini <b>otomatis langsung jadi pilihan</b> di form BBM (Alat), form Ritasi DT (khusus jenis Dump Truck), form status Alat di atas, dan tabulasi Pemakaian BBM per Alat — tanpa perlu ketik manual lagi. Jenis alat boleh diketik baru (mis. "Water Tank Truck"), nanti otomatis nambah ke daftar jenis.</div>
+
+        <div class="filters-row">
+          <select id="alatMasterJenisFilter">
+            <option value="all">Semua Jenis</option>
+          </select>
+          <input type="text" id="alatMasterSearch" placeholder="Cari nama alat / jenis…" style="min-width:220px;">
+        </div>
+
+        <div class="stock-breakdown" id="alatMasterJenisChips"></div>
+
+        <table class="datatable">
+          <thead><tr><th>No</th><th>Nama Alat</th><th>Jenis</th><th>Dipakai di Catatan</th><th></th></tr></thead>
+          <tbody id="alatMasterTbody"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ================= MANPOWER ================= -->
@@ -957,6 +979,33 @@
       <div class="form-actions">
         <button type="button" class="btn ghost" data-close>Batal</button>
         <button type="submit" class="btn primary" id="a-submit">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-alat-master">
+  <div class="modal">
+    <button class="close" data-close>✕</button>
+    <h2 id="alat-master-modal-title">Tambah Alat ke Daftar Armada</h2>
+    <p class="subtitle" style="margin-bottom:0;">Alat yang disimpan di sini langsung jadi pilihan di form BBM, Ritasi DT, dan status Alat.</p>
+    <form id="form-alat-master">
+      <div class="form-grid">
+        <div class="form-field full">
+          <label>Nama Alat / Unit</label>
+          <input type="text" id="am-nama" placeholder="mis. Sany DT-78" maxlength="120" required>
+        </div>
+        <div class="form-field full">
+          <label>Jenis Alat</label>
+          <input type="text" id="am-jenis" list="alatJenisOptions" placeholder="Pilih jenis yang ada atau ketik jenis baru" maxlength="60" required>
+          <datalist id="alatJenisOptions"></datalist>
+        </div>
+      </div>
+      <div class="contract-note" style="margin-top:0;">Pilih jenis dari daftar yang muncul, atau ketik jenis baru kalau belum ada. Alat berjenis <b>Dump Truck</b> otomatis ikut jadi pilihan unit di menu Ritasi DT.</div>
+      <div class="form-error" id="am-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="button" class="btn ghost" data-close>Batal</button>
+        <button type="submit" class="btn primary" id="am-submit">Simpan</button>
       </div>
     </form>
   </div>

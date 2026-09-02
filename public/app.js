@@ -56,61 +56,17 @@ const ROLE_ALLOWED_VIEWS = {
 const ITEM_COLOR_PALETTE = ["#3987e5", "#d95926", "#199e70", "#9085e9", "#e6c34d", "#e667a0", "#5cc9e8", "#c9a26d"];
 const EQUIPMENT_TYPE_OPTIONS = ["Excavator", "Bulldozer", "Dump Truck", "Vibro Roller", "Motor Grader", "Compactor", "Crane", "Chainsaw/Alat Land Clearing", "Lainnya"];
 
-// Master data armada alat & unit DT — sesuai data monitoring BBM proyek yang
-// dikirim (daftar Nama Alat pada laporan pemakaian BBM solar). Dipakai sebagai
-// sumber pilihan (select) di form BBM, Ritasi DT & tabulasi Alat — supaya tidak
-// perlu ketik manual satu-satu lagi.
-const ALAT_MASTER_LIST = [
-  { nama: "Bulldozer BD-07", jenis: "Bulldozer" },
-  { nama: "Bulldozer BD-08", jenis: "Bulldozer" },
-  { nama: "Hitachi BR-01", jenis: "Bulldozer" },
-  { nama: "Sakai WBR-02", jenis: "Vibro Roller" },
-  { nama: "Bomag CVR-04", jenis: "Vibro Roller" },
-  { nama: "Bomag CVR-05", jenis: "Vibro Roller" },
-  { nama: "Bomag CVR-06", jenis: "Vibro Roller" },
-  { nama: "Bomag CVR-07", jenis: "Vibro Roller" },
-  { nama: "HINO DT-26", jenis: "Dump Truck" },
-  { nama: "Hanvan DT-62", jenis: "Dump Truck" },
-  { nama: "Hanvan DT-63", jenis: "Dump Truck" },
-  { nama: "Hanvan DT-64", jenis: "Dump Truck" },
-  { nama: "Hanvan DT-65", jenis: "Dump Truck" },
-  { nama: "Hanvan DT-66", jenis: "Dump Truck" },
-  { nama: "Hanvan DT-67", jenis: "Dump Truck" },
-  { nama: "Sany DT-69", jenis: "Dump Truck" },
-  { nama: "Sany DT-70", jenis: "Dump Truck" },
-  { nama: "Sany DT-71", jenis: "Dump Truck" },
-  { nama: "Sany DT-72", jenis: "Dump Truck" },
-  { nama: "Sany DT-73", jenis: "Dump Truck" },
-  { nama: "Sany DT-74", jenis: "Dump Truck" },
-  { nama: "Sany DT-75", jenis: "Dump Truck" },
-  { nama: "Sany DT-76", jenis: "Dump Truck" },
-  { nama: "Sany DT-77", jenis: "Dump Truck" },
-  { nama: "ZAXIS 200 (E-26)", jenis: "Excavator" },
-  { nama: "ZAXIS 200 (E-27)", jenis: "Excavator" },
-  { nama: "ZAXIS 200 (E-28)", jenis: "Excavator" },
-  { nama: "ZAXIS 350 (E-31)", jenis: "Excavator" },
-  { nama: "ZAXIS 350 (E-33)", jenis: "Excavator" },
-  { nama: "ZAXIS 350 (E-34)", jenis: "Excavator" },
-  { nama: "ZAXIS 350 (E-35)", jenis: "Excavator" },
-  { nama: "ZAXIS 70 (E-38)", jenis: "Excavator" },
-  { nama: "ZAXIS 70 (E-39)", jenis: "Excavator" },
-  { nama: "ZAXIS 70 (E-40)", jenis: "Excavator" },
-  { nama: "ZAXIS 70 (E-41)", jenis: "Excavator" },
-  { nama: "ZAXIS 70 (E-42)", jenis: "Excavator" },
-  { nama: "ZAXIS 70 (E-43)", jenis: "Excavator" },
-  { nama: "Genset 45 kva G85", jenis: "Lainnya" },
-  { nama: "Genset Yanmar TS 230", jenis: "Lainnya" },
-  { nama: "Triton Single BK 8608 ES", jenis: "Lainnya" },
-  { nama: "Triton Double BK 8901 FE", jenis: "Lainnya" },
-  { nama: "Hilux Double BK 8240 GO", jenis: "Lainnya" },
-  { nama: "L300 BK 8064 GZ", jenis: "Lainnya" },
-  { nama: "Dutro FT-01 DT-59", jenis: "Dump Truck" },
-  { nama: "Dutro Gresing DT-33", jenis: "Dump Truck" },
-  { nama: "MESIN KOMPRESOR PISPOT", jenis: "Lainnya" },
-  { nama: "Dutro MH DT-58", jenis: "Dump Truck" },
-  { nama: "Dutro MH DT-59", jenis: "Dump Truck" },
-];
-const DT_UNIT_LIST = ALAT_MASTER_LIST.filter((a) => a.jenis === "Dump Truck").map((a) => a.nama);
+// Master data armada alat & unit DT — sekarang disimpan di server (tabel
+// equipment_master) dan diisi saat boot() dari /api/bootstrap, bukan lagi
+// daftar tetap di kode. Ini yang jadi sumber pilihan (select) di form BBM,
+// Ritasi DT & tabulasi Alat, jadi begitu Pengelola menambah alat lewat kartu
+// "Daftar Armada" di menu Alat, pilihannya langsung ikut bertambah.
+let ALAT_MASTER_LIST = [];
+// Unit Dump Truck diturunkan dari master alat; dipakai fungsi (bukan konstanta)
+// supaya ikut berubah setiap daftar armada diperbarui.
+function dtUnitList() { return ALAT_MASTER_LIST.filter((a) => a.jenis === "Dump Truck").map((a) => a.nama); }
+function alatJenisList() { return [...new Set(ALAT_MASTER_LIST.map((a) => a.jenis).filter(Boolean))].sort((x, y) => x.localeCompare(y)); }
+function findAlatMaster(id) { return ALAT_MASTER_LIST.find((a) => a.id === id); }
 
 /* ---------------------------------------------------------------------
    API helpers — semua data diambil/disimpan lewat server, bukan lagi
@@ -128,7 +84,7 @@ async function apiFetch(url, opts) {
   }
   return body;
 }
-const API_RESOURCE = { production: "production", ritasi: "ritasi", fuel: "fuel", equipment: "equipment", manpower: "manpower", weather: "weather", documents: "documents", kontrak: "kontrak", isu: "isu", rencana: "rencana" };
+const API_RESOURCE = { production: "production", ritasi: "ritasi", fuel: "fuel", equipment: "equipment", alatMaster: "alat-master", manpower: "manpower", weather: "weather", documents: "documents", kontrak: "kontrak", isu: "isu", rencana: "rencana" };
 function apiCreate(kind, data) { return apiFetch(`/api/${API_RESOURCE[kind]}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); }
 function apiUpdate(kind, id, data) { return apiFetch(`/api/${API_RESOURCE[kind]}/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); }
 function apiDelete(kind, id) { return apiFetch(`/api/${API_RESOURCE[kind]}/${id}`, { method: "DELETE" }); }
@@ -157,7 +113,7 @@ let heroPhotoIndex = {}; // projectId -> index foto yang sedang ditampilkan
 let fuelOpeningBalance = {}; // projectId -> Saldo Awal BBM (Liter), dari server
 
 let state = { projectId: null, view: "overview", dokFolder: null, documentsUnlocked: false, pengelolaRole: null, pengelolaLabel: null, chatView: "list", visitorSessionId: null };
-let editing = { produksi: null, bbm: null, alat: null, manpower: null, cuaca: null, kontrak: null, ritasi: null, isu: null };
+let editing = { produksi: null, bbm: null, alat: null, alatMaster: null, manpower: null, cuaca: null, kontrak: null, ritasi: null, isu: null };
 
 // Chat internal — pesan tersimpan permanen di server (tabel chat_messages),
 // hanya bisa dibaca setelah login sebagai Pengelola (akun mana pun).
@@ -242,18 +198,39 @@ function fillProjectSelects() {
   }
   ["#produksiProjectFilter", "#ritasiProjectFilter", "#bbmProjectFilter", "#alatProjectFilter", "#manpowerProjectFilter", "#cuacaProjectFilter", "#dokumenProjectFilter", "#isuProjectFilter"].forEach((sel) => ($(sel).value = "all"));
   $("#jabatanOptions").innerHTML = JABATAN_POOL.map((j) => `<option value="${escapeHtml(j.jabatan)}"></option>`).join("");
-  $("#r-unit").innerHTML = DT_UNIT_LIST.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
-  populateFuelEquipmentOptions(false);
-  const ritasiUnitFilterEl = $("#ritasiUnitFilter");
-  if (ritasiUnitFilterEl) {
-    ritasiUnitFilterEl.innerHTML = '<option value="all">Semua Unit DT</option>' + DT_UNIT_LIST.map((u) => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
-  }
-  $("#a-nama").innerHTML = ALAT_MASTER_LIST.map((a) => `<option value="${escapeHtml(a.nama)}">${escapeHtml(a.nama)}</option>`).join("");
-  const alatJenisFilterEl = $("#alatJenisFilter");
-  if (alatJenisFilterEl) {
-    const jenisList = [...new Set(ALAT_MASTER_LIST.map((a) => a.jenis))];
-    alatJenisFilterEl.innerHTML = '<option value="all">Semua Jenis</option>' + jenisList.map((j) => `<option value="${escapeHtml(j)}">${escapeHtml(j)}</option>`).join("");
-  }
+  refreshAlatOptions();
+}
+
+/* Semua dropdown yang isinya berasal dari Master Alat dibangun ulang di satu
+   tempat ini, dan dipanggil lagi setiap daftar armada berubah — itu yang bikin
+   alat baru langsung muncul sebagai pilihan di BBM/Ritasi/Alat tanpa refresh.
+   Nilai yang sedang dipilih di filter dipertahankan kalau masih ada. */
+function refreshAlatOptions() {
+  const optionsHtml = (list) => list.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");
+  const keepValue = (el, build) => {
+    if (!el) return;
+    const prev = el.value;
+    build(el);
+    if (prev && [...el.options].some((o) => o.value === prev)) el.value = prev;
+  };
+
+  const dtUnits = dtUnitList();
+  const jenisList = alatJenisList();
+
+  keepValue($("#r-unit"), (el) => { el.innerHTML = optionsHtml(dtUnits); });
+  keepValue($("#ritasiUnitFilter"), (el) => { el.innerHTML = '<option value="all">Semua Unit DT</option>' + optionsHtml(dtUnits); });
+  keepValue($("#a-nama"), (el) => { el.innerHTML = optionsHtml(ALAT_MASTER_LIST.map((a) => a.nama)); });
+  keepValue($("#alatJenisFilter"), (el) => { el.innerHTML = '<option value="all">Semua Jenis</option>' + optionsHtml(jenisList); });
+  keepValue($("#alatMasterJenisFilter"), (el) => { el.innerHTML = '<option value="all">Semua Jenis</option>' + optionsHtml(jenisList); });
+
+  const jenisDatalist = $("#alatJenisOptions");
+  if (jenisDatalist) jenisDatalist.innerHTML = jenisList.map((j) => `<option value="${escapeHtml(j)}"></option>`).join("");
+
+  // Dropdown alat di form BBM cuma dibangun ulang kalau modalnya sedang menampilkan
+  // daftar alat (BBM keluar) — supaya pilihan "Sumber/Pengiriman" saat BBM masuk
+  // tidak ikut tertimpa.
+  const fuelTypeEl = $("#f-type");
+  if (fuelTypeEl) keepValue($("#f-equipment"), () => populateFuelEquipmentOptions(fuelTypeEl.value === "masuk"));
 }
 
 els.todayBadge.textContent = "Hari ini: " + fmtDateLong(todayISO());
@@ -265,7 +242,7 @@ els.openAddBtn.disabled = false;
 const ADD_BUTTON_LABEL = { overview: null, produksi: "+ Tambah Produksi", ritasi: "+ Tambah Ritasi DT", bbm: "+ Tambah BBM", alat: "+ Tambah Alat", manpower: "+ Tambah Manpower", cuaca: "+ Tambah Cuaca", dokumen: "+ Upload Dokumen", isu: "+ Tambah Isu", kontrak: "+ Tambah Item Kontrak" };
 const VIEW_TITLE = { overview: "Beranda", produksi: "Laporan Produksi Harian", ritasi: "Laporan Ritasi Dump Truck (DT)", bbm: "Laporan BBM", alat: "Tabulasi Status Alat", manpower: "Tabulasi Manpower", cuaca: "Laporan Cuaca Harian", dokumen: "Dokumen", isu: "Catatan Isu Eksternal, Internal & K3", kontrak: "Realisasi Progres S.d Ini" };
 const MODAL_OPENER_FOR_VIEW = { produksi: (r) => openProduksiModal(r), ritasi: (r) => openRitasiModal(r), bbm: (r) => openBbmModal(r), alat: (r) => openAlatModal(r), manpower: (r) => openManpowerModal(r), cuaca: (r) => openCuacaModal(r), isu: (r) => openIsuModal(r), kontrak: (r) => openKontrakModal(r) };
-const MODAL_EDIT_KEY = { "modal-produksi": "produksi", "modal-ritasi": "ritasi", "modal-bbm": "bbm", "modal-alat": "alat", "modal-manpower": "manpower", "modal-cuaca": "cuaca", "modal-isu": "isu", "modal-kontrak": "kontrak" };
+const MODAL_EDIT_KEY = { "modal-produksi": "produksi", "modal-ritasi": "ritasi", "modal-bbm": "bbm", "modal-alat": "alat", "modal-alat-master": "alatMaster", "modal-manpower": "manpower", "modal-cuaca": "cuaca", "modal-isu": "isu", "modal-kontrak": "kontrak" };
 
 function setView(view) {
   state.view = view;
@@ -1028,6 +1005,14 @@ function bbmPerAlatTotals(projFilter) {
   const totals = new Map();
   keluarRows.forEach((r) => { totals.set(r.equipment, (totals.get(r.equipment) || 0) + r.liters); });
   const list = ALAT_MASTER_LIST.map((a) => ({ nama: a.nama, jenis: a.jenis, total: totals.get(a.nama) || 0 }));
+  // Nama alat yang ada di catatan BBM tapi sudah tidak ada di daftar armada
+  // (mis. alat lama yang dihapus dari master, atau nama dari file Excel yang
+  // belum didaftarkan) tetap ditampilkan supaya total pemakaian solar di tabel
+  // ini selalu cocok dengan total di ringkasan stok.
+  const known = new Set(ALAT_MASTER_LIST.map((a) => a.nama));
+  totals.forEach((total, nama) => {
+    if (!known.has(nama)) list.push({ nama, jenis: "Di luar daftar armada", total });
+  });
   list.sort((a, b) => b.total - a.total || a.nama.localeCompare(b.nama));
   return list;
 }
@@ -1191,6 +1176,132 @@ $("#form-alat").addEventListener("submit", async (e) => {
     showToast(err.message || "Gagal menyimpan data alat.", true);
   }
 });
+
+/* ---------------------------------------------------------------------
+   Master Alat (Daftar Armada)
+
+   Daftar induk alat proyek. Sengaja dibuat satu sumber untuk semua dropdown:
+   begitu alat ditambah/diubah/dihapus di sini, refreshAlatOptions() dipanggil
+   dan pilihan di form BBM (Alat), form Ritasi DT (unit DT), form status Alat,
+   serta tabulasi Pemakaian BBM per Alat ikut berubah otomatis.
+--------------------------------------------------------------------- */
+
+// Berapa catatan lama yang menyebut nama alat ini — ditampilkan di kolom
+// "Dipakai di Catatan" sebagai peringatan sebelum menghapus/mengganti nama.
+function alatMasterUsage(nama) {
+  const bbm = fuel.filter((r) => r.equipment === nama).length;
+  const rit = ritasi.filter((r) => r.unit === nama).length;
+  const alat = equipment.filter((r) => r.nama === nama).length;
+  return { bbm, rit, alat, total: bbm + rit + alat };
+}
+
+function openAlatMasterModal(row) {
+  editing.alatMaster = row ? row.id : null;
+  $("#alat-master-modal-title").textContent = row ? "Edit Alat di Daftar Armada" : "Tambah Alat ke Daftar Armada";
+  $("#am-submit").textContent = row ? "Simpan Perubahan" : "Simpan";
+  $("#am-nama").value = row ? row.nama : "";
+  $("#am-jenis").value = row ? row.jenis : "";
+  $("#am-error").style.display = "none";
+  refreshAlatOptions();
+  openModal("modal-alat-master");
+  $("#am-nama").focus();
+}
+$("#alatMasterAddBtn").addEventListener("click", () => openAlatMasterModal(null));
+
+function renderAlatMasterTable() {
+  const jenisFilter = $("#alatMasterJenisFilter").value;
+  const q = $("#alatMasterSearch").value.trim().toLowerCase();
+  let rows = ALAT_MASTER_LIST.slice();
+  if (jenisFilter && jenisFilter !== "all") rows = rows.filter((r) => r.jenis === jenisFilter);
+  if (q) rows = rows.filter((r) => (r.nama + " " + r.jenis).toLowerCase().includes(q));
+
+  // Ringkasan jumlah unit per jenis — sekaligus jadi bukti visual kalau jenis
+  // baru yang diketik pengguna sudah masuk ke daftar.
+  const counts = new Map();
+  ALAT_MASTER_LIST.forEach((a) => counts.set(a.jenis, (counts.get(a.jenis) || 0) + 1));
+  $("#alatMasterJenisChips").innerHTML = ALAT_MASTER_LIST.length
+    ? [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([jenis, n]) => `<div class="stock-chip"><div class="name">${escapeHtml(jenis)}</div><div class="amount">${n} unit</div></div>`).join("")
+    : "";
+
+  if (!ALAT_MASTER_LIST.length) {
+    $("#alatMasterTbody").innerHTML = `<tr><td colspan="5" class="empty-note">Daftar armada masih kosong. Klik "+ Tambah Alat ke Daftar" untuk menambah alat pertama — alat itu langsung jadi pilihan saat mengisi BBM.</td></tr>`;
+    return;
+  }
+  if (!rows.length) {
+    $("#alatMasterTbody").innerHTML = `<tr><td colspan="5" class="empty-note">Tidak ada alat yang cocok dengan filter/pencarian.</td></tr>`;
+    return;
+  }
+  $("#alatMasterTbody").innerHTML = rows.map((r, i) => {
+    const u = alatMasterUsage(r.nama);
+    const usageText = u.total
+      ? `${fmtNum(u.total)} catatan <span class="muted">(BBM ${u.bbm} · Ritasi ${u.rit} · Status ${u.alat})</span>`
+      : '<span class="muted">Belum dipakai</span>';
+    return `
+    <tr>
+      <td>${i + 1}</td>
+      <td><b>${escapeHtml(r.nama)}</b></td>
+      <td><span class="equip-badge">${escapeHtml(r.jenis)}</span></td>
+      <td>${usageText}</td>
+      <td><button class="edit-btn" data-kind="alatMaster" data-id="${r.id}">Edit</button><button class="del-btn" data-kind="alatMaster" data-id="${r.id}">Hapus</button></td>
+    </tr>`;
+  }).join("");
+}
+
+["#alatMasterJenisFilter", "#alatMasterSearch"].forEach((sel) => $(sel).addEventListener("input", renderAlatMasterTable));
+
+$("#form-alat-master").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = $("#am-error");
+  const nama = $("#am-nama").value.replace(/\s+/g, " ").trim();
+  const jenis = $("#am-jenis").value.replace(/\s+/g, " ").trim();
+  const showErr = (msg) => { errEl.textContent = msg; errEl.style.display = "block"; };
+  errEl.style.display = "none";
+
+  if (!nama) return showErr("Nama alat wajib diisi.");
+  if (!jenis) return showErr("Jenis alat wajib diisi — pilih dari daftar atau ketik jenis baru.");
+  const bentrok = ALAT_MASTER_LIST.find((a) => a.nama.toLowerCase() === nama.toLowerCase() && a.id !== editing.alatMaster);
+  if (bentrok) return showErr(`Alat dengan nama "${bentrok.nama}" sudah ada di daftar armada.`);
+
+  const submitBtn = $("#am-submit");
+  submitBtn.disabled = true;
+  try {
+    if (editing.alatMaster) {
+      const updated = await apiUpdate("alatMaster", editing.alatMaster, { nama, jenis });
+      const renamed = updated.renamed || { fuel: 0, ritasi: 0, equipment: 0 };
+      const total = renamed.fuel + renamed.ritasi + renamed.equipment;
+      // Ganti nama juga memperbarui catatan lama di server (BBM/Ritasi/status
+      // Alat), jadi salinan data di browser ditarik ulang supaya tabel & rekap
+      // langsung ikut benar tanpa perlu reload halaman.
+      await reloadAlatMasterFromServer();
+      showToast(total ? `Alat diperbarui — ${fmtNum(total)} catatan lama ikut disesuaikan.` : "Alat diperbarui.");
+    } else {
+      const created = await apiCreate("alatMaster", { nama, jenis });
+      ALAT_MASTER_LIST.push(created);
+      showToast(`"${created.nama}" ditambahkan — sekarang sudah jadi pilihan saat mengisi BBM.`);
+    }
+    closeModal($("#modal-alat-master"));
+    refreshAll();
+  } catch (err) {
+    showErr(err.message || "Gagal menyimpan alat.");
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+// Ganti nama alat ikut mengubah catatan lama di server; cara paling aman untuk
+// menyamakan salinan di browser adalah menarik ulang data dari server.
+async function reloadAlatMasterFromServer() {
+  try {
+    const data = await apiFetch("/api/bootstrap");
+    ALAT_MASTER_LIST = data.alatMaster || ALAT_MASTER_LIST;
+    fuel = data.fuel || fuel;
+    ritasi = data.ritasi || ritasi;
+    equipment = data.equipment || equipment;
+  } catch (err) {
+    console.error("Gagal menyegarkan data setelah ganti nama alat:", err);
+  }
+}
 
 /* ---------------------------------------------------------------------
    Manpower (terpisah dari Alat) — tabulasi per jabatan & jumlah orang
@@ -2249,8 +2360,8 @@ $("#bbmSaldoAwalSaveBtn").addEventListener("click", async () => {
 /* ---------------------------------------------------------------------
    Edit & Hapus (generic, event delegation)
 --------------------------------------------------------------------- */
-const DATA_ARRAY = { production: () => production, ritasi: () => ritasi, fuel: () => fuel, equipment: () => equipment, manpower: () => manpower, weather: () => weather, documents: () => documents, kontrak: () => kontrak, isu: () => isu, rencana: () => rencanaProgress };
-const EDIT_OPENER = { production: openProduksiModal, ritasi: openRitasiModal, fuel: openBbmModal, equipment: openAlatModal, manpower: openManpowerModal, weather: openCuacaModal, kontrak: openKontrakModal, isu: openIsuModal };
+const DATA_ARRAY = { production: () => production, ritasi: () => ritasi, fuel: () => fuel, equipment: () => equipment, alatMaster: () => ALAT_MASTER_LIST, manpower: () => manpower, weather: () => weather, documents: () => documents, kontrak: () => kontrak, isu: () => isu, rencana: () => rencanaProgress };
+const EDIT_OPENER = { production: openProduksiModal, ritasi: openRitasiModal, fuel: openBbmModal, equipment: openAlatModal, alatMaster: openAlatMasterModal, manpower: openManpowerModal, weather: openCuacaModal, kontrak: openKontrakModal, isu: openIsuModal };
 
 document.addEventListener("click", async (e) => {
   const editBtn = e.target.closest(".edit-btn");
@@ -2264,9 +2375,16 @@ document.addEventListener("click", async (e) => {
   const delBtn = e.target.closest(".del-btn");
   if (delBtn) {
     const kind = delBtn.dataset.kind, id = Number(delBtn.dataset.id);
-    const msg = kind === "kontrak"
-      ? "Hapus item kontrak ini? Laporan Produksi Harian yang sudah memakai item ini akan tetap ada tapi kehilangan sambungannya ke kontrak. Lanjutkan?"
-      : "Hapus data ini? Tindakan ini tidak bisa dibatalkan.";
+    let msg = "Hapus data ini? Tindakan ini tidak bisa dibatalkan.";
+    if (kind === "kontrak") {
+      msg = "Hapus item kontrak ini? Laporan Produksi Harian yang sudah memakai item ini akan tetap ada tapi kehilangan sambungannya ke kontrak. Lanjutkan?";
+    } else if (kind === "alatMaster") {
+      const row = ALAT_MASTER_LIST.find((r) => r.id === id);
+      const u = row ? alatMasterUsage(row.nama) : { total: 0 };
+      msg = u.total
+        ? `Hapus "${row.nama}" dari daftar armada? Alat ini sudah dipakai di ${fmtNum(u.total)} catatan (BBM/Ritasi/status Alat). Catatan lamanya TIDAK ikut terhapus, tapi alat ini tidak akan muncul lagi sebagai pilihan saat mengisi BBM. Lanjutkan?`
+        : `Hapus "${row ? row.nama : "alat ini"}" dari daftar armada? Alat ini tidak akan muncul lagi sebagai pilihan saat mengisi BBM.`;
+    }
     if (!confirm(msg)) return;
     try {
       await apiDelete(kind, id);
@@ -2489,6 +2607,10 @@ $("#kontrakExportBtn").addEventListener("click", exportKontrakExcel);
 --------------------------------------------------------------------- */
 function refreshAll() {
   if (!state.projectId) return;
+  // Dropdown yang bersumber dari Master Alat dibangun ulang lebih dulu supaya
+  // alat yang baru ditambah langsung tersedia di semua form.
+  refreshAlatOptions();
+  renderAlatMasterTable();
   renderKpis();
   renderProductionChart();
   renderFuelChart();
@@ -3007,6 +3129,7 @@ async function boot() {
     docFolders = data.docFolders || [];
     rencanaProgress = data.rencana || [];
     fuelOpeningBalance = data.fuelOpeningBalance || {};
+    ALAT_MASTER_LIST = data.alatMaster || [];
     projectPhotos = data.photos || {};
     state.projectId = PROJECTS[0] ? PROJECTS[0].id : null;
     state.documentsUnlocked = !!data.docsUnlocked;
